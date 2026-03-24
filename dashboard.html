@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FishMar | Dashboard</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    /* Estilos adicionales */
+    body {
+      background: linear-gradient(135deg, #e0f2fe 0%, #cfe9ff 100%);
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120'%3E%3Cpath fill='%230ea5a4' fill-opacity='0.05' d='M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z' opacity='.25'%3E%3C/path%3E%3C/svg%3E");
+      background-repeat: repeat-x;
+      background-position: bottom;
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .container {
+      position: relative;
+      z-index: 1;
+    }
+    .header {
+      background: linear-gradient(135deg, #0ea5a4, #0b7f7e);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    }
+    .stat-card {
+      background: white;
+      border-radius: 24px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+      transition: transform 0.2s, box-shadow 0.2s;
+      border: none;
+    }
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.1);
+    }
+    .stat-card h4 {
+      color: #0ea5a4;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .stat-card p {
+      font-size: 2rem;
+      font-weight: 800;
+      margin: 0;
+      color: #0ea5a4;
+    }
+    .panel {
+      background: white;
+      border-radius: 28px;
+      border: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+      transition: box-shadow 0.2s;
+      overflow: hidden;
+    }
+    .panel:hover {
+      box-shadow: 0 12px 28px rgba(0,0,0,0.1);
+    }
+    .toolbar select, .toolbar input, .toolbar button {
+      border-radius: 40px;
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      border: 1px solid #e2e8f0;
+      background: white;
+      transition: all 0.2s;
+    }
+    .toolbar select:focus, .toolbar input:focus {
+      outline: none;
+      border-color: #0ea5a4;
+      box-shadow: 0 0 0 2px rgba(14,165,164,0.2);
+    }
+    .toolbar button {
+      background: #0ea5a4;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .toolbar button.secondary-btn {
+      background: #2c3e50;
+    }
+    .toolbar button:hover {
+      transform: scale(1.02);
+      background: #0b7f7e;
+    }
+    .admin-item {
+      background: #f9fbfd;
+      border: 1px solid #eef2f6;
+      border-radius: 20px;
+      transition: all 0.2s;
+    }
+    .admin-item:hover {
+      border-color: #0ea5a4;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .pedido-card {
+      background: white;
+      border-radius: 24px;
+      padding: 20px;
+      margin-bottom: 16px;
+      border-left-width: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    }
+    .pedido-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+    }
+    .delete-pedido-btn, .map-btn {
+      border-radius: 40px;
+      padding: 8px 16px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .delete-pedido-btn:hover, .map-btn:hover {
+      transform: scale(1.02);
+    }
+    .form-panel input, .form-panel select, .form-panel textarea {
+      border-radius: 20px;
+      border: 1px solid #e2e8f0;
+      padding: 12px 16px;
+      transition: all 0.2s;
+    }
+    .form-panel input:focus, .form-panel select:focus {
+      border-color: #0ea5a4;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(14,165,164,0.2);
+    }
+    .img-preview {
+      border-radius: 20px;
+      background: #f8fafc;
+    }
+    .chart-panel canvas {
+      max-height: 300px;
+      width: 100%;
+    }
+    .clicked {
+      transform: scale(0.95) !important;
+      transition: transform 0.1s ease;
+    }
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        gap: 16px;
+      }
+      .stat-card p {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+    <header class="header">
+      <div class="header-inner">
+        <div class="logo-area">
+          <h1>🐟 Fish-Mar Admin</h1>
+          <p class="tagline">Control total del negocio</p>
+        </div>
+        <button class="ghost-btn" onclick="logout()">Cerrar sesión</button>
+      </div>
+    </header>
+
+  <main class="container dashboard">
+    <section class="stats-grid">
+      <div class="stat-card">
+        <h4>Pedidos hoy</h4>
+        <p id="statPedidos">0</p>
+      </div>
+      <div class="stat-card">
+        <h4>Ingresos</h4>
+        <p id="statIngresos">$0.00</p>
+      </div>
+      <div class="stat-card">
+        <h4>En proceso</h4>
+        <p id="statProceso">0</p>
+      </div>
+      <div class="stat-card">
+        <h4>Entregados</h4>
+        <p id="statEntregados">0</p>
+      </div>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="panel pedidos-panel">
+        <div class="panel-header">
+          <h2>Pedidos</h2>
+          <div class="toolbar">
+            <select id="filtroEstado" onchange="cargarPedidos()">
+              <option value="Todos">Todos</option>
+              <option value="Recibido">Recibido</option>
+              <option value="En proceso">En proceso</option>
+              <option value="El repartidor está en camino">En camino</option>
+              <option value="Entregado">Entregado</option>
+            </select>
+            <input id="filtroFecha" type="date" onchange="cargarPedidos()" />
+            <button class="primary-btn" onclick="ponerHoy()">Hoy</button>
+            <button class="secondary-btn" onclick="cerrarDia()">Cerrar día</button>
+          </div>
+        </div>
+        <div id="pedidos" class="admin-list"></div>
+      </div>
+
+      <div class="panel chart-panel">
+        <h2>Pedidos por estado</h2>
+        <canvas id="graficaPedidos"></canvas>
+      </div>
+
+      <div class="panel productos-panel">
+        <h2>Productos</h2>
+        <div id="productosAdmin" class="admin-list"></div>
+      </div>
+
+      <div class="panel form-panel" id="productFormPanel">
+        <h2>Nuevo producto</h2>
+        <input id="nombre" type="text" placeholder="Nombre" />
+        <input id="precio" type="number" placeholder="Precio" />
+        <select id="categoria" onchange="toggleSubcategoria()">
+          <option>Pescadería</option>
+          <option>Marisquería</option>
+        </select>
+
+        <div id="subcategoriaDiv" style="display: none;">
+          <select id="subcategoria">
+            <option value="">Selecciona subcategoría</option>
+            <option value="Antojitos">Antojitos</option>
+            <option value="Mojarras">Mojarras</option>
+            <option value="Cocteles">Cocteles</option>
+            <option value="Filetes">Filetes</option>
+            <option value="Sushi y Onigiri">Sushi y Onigiri</option>
+            <option value="Camarones">Camarones</option>
+            <option value="Tostadas">Tostadas</option>
+            <option value="Ensaladas y Papas">Ensaladas y Papas</option>
+            <option value="Postres">Postres</option>
+            <option value="Paquetes para Compartir">Paquetes para Compartir</option>
+            <option value="Bebidas">Bebidas</option>
+          </select>
+        </div>
+
+        <input id="descripcion" type="text" placeholder="Descripción del producto" />
+        <select id="tipoVenta">
+          <option value="pieza">Venta por pieza</option>
+          <option value="granel">Venta por kg (a granel)</option>
+        </select>
+        <input id="imagen_url" type="text" placeholder="URL imagen" />
+        <div class="img-preview">
+          <img id="previewImg" src="" alt="Vista previa" />
+        </div>
+        <button class="primary-btn" onclick="crearProducto()">Guardar</button>
+        <button class="secondary-btn" onclick="limpiarFormulario()">Limpiar</button>
+      </div>
+
+      <div class="panel full-width">
+        <h2>Resumen por repartidor</h2>
+        <div id="resumenRepartidores" class="admin-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

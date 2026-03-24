@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FishMar | Repartidor</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+      <header class="header">
+        <div class="header-inner">
+          <div class="logo-area">
+            <h1>🐟 Fish-Mar Repartidor</h1>
+            <p class="tagline">Solo tus pedidos asignados</p>
+          </div>
+          <button class="ghost-btn" onclick="logout()">Cerrar sesión</button>
+        </div>
+      </header>
+
+  <main class="container">
+
+    <section class="stats-grid">
+      <div class="stat-card">
+        <h4>Pedidos asignados</h4>
+        <p id="statAsignados">0</p>
+      </div>
+
+      <div class="stat-card">
+        <h4>En camino</h4>
+        <p id="statCamino">0</p>
+      </div>
+
+      <div class="stat-card">
+        <h4>Entregados</h4>
+        <p id="statEntregadosR">0</p>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Mis pedidos</h2>
+      <div id="misPedidos" class="admin-list"></div>
+    </section>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/repartidor.js"></script>
+</body>
+</html>

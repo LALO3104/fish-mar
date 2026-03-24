@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FishMar | Pescadería y Marisquería</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="logo-area">
+      <h1>🐟 Fish-Mar <span class="brand-subtitle">"Pescados & Mariscos"</span></h1>
+      <p class="tagline">Del mar a tu mesa, con la mejor frescura</p>
+    </div>
+    <button class="ghost-btn" onclick="switchCategory('all')">Ver todo</button>
+  </div>
+</header>
+
+<!-- Carrusel de promociones premium -->
+<div class="promo-carousel">
+  <div class="carousel-inner">
+    <div class="carousel-slide active">
+      <div class="slide-bg" style="background-image: url('https://lh3.googleusercontent.com/p/AF1QipOS3HI3iMCmKUmLt5P1aXTfm4XoJ6SCDNZ4WBZb=s1360-w1360-h1020-rw')"></div>
+    </div>
+    <div class="carousel-slide">
+      <div class="slide-bg" style="background-image: url('https://lh3.googleusercontent.com/p/AF1QipPUHxyURTgmJqjwBnjcUBQh9EIv6Qz7Vi-CfcAk=s1360-w1360-h1020-rw')"></div>
+      <div class="slide-content">
+        <h3>🦐 Envío sin costo</h3>
+        <p>Consumo minimo $140</p>
+        <div class="promo-badge">Aplica automáticamente</div>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <div class="slide-bg" style="background-image: url('https://scontent.fmex1-5.fna.fbcdn.net/v/t39.30808-6/497748420_1278244884301722_4385269525777860028_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=7b2446&_nc_eui2=AeEBtrYevQUuPLsccD5qB0Y2ngnHbkRKSNOeCcduREpI05Wdiuh-t2DuFwzCgYjfx4X7xYZ9fz0UlRzp4CgI-hHh&_nc_ohc=M4kD4GSLpZcQ7kNvwHxrDfR&_nc_oc=Adq0q-kjboZjK4KHEVSvsPzzXmCpIMDKGDKk0DMp4L2bglbp5ejjEZ7qXnPSTEW5goHbKmZ1_RcmjOMbpnmQKdvX&_nc_zt=23&_nc_ht=scontent.fmex1-5.fna&_nc_gid=b7IJTBD_RNyoK7Gq1QVQIw&_nc_ss=7a32e&oh=00_Afy2rfNcbHHoZKCVsWSfi-DXWSZIgg_zPkeBSkq4tBnPTQ&oe=69C79A7D')"></div>
+    </div>
+  </div>
+
+  <button class="carousel-control prev" aria-label="Anterior">‹</button>
+  <button class="carousel-control next" aria-label="Siguiente">›</button>
+
+  <div class="carousel-dots"></div>
+</div>
+
+  <main class="container">
+    <section class="hero-card">
+      <h2>Haz tu pedido fácil y rápido</h2>
+      <p>Elige tus productos, agrega al carrito y envía tu pedido por WhatsApp.</p>
+    </section>
+
+<section class="category-bar">
+  <button class="category-btn active" id="btnAll" onclick="switchCategory('all')">Todo</button>
+  <button class="category-btn" id="btnPescaderia" onclick="switchCategory('Pescadería')">Pescadería</button>
+  <button class="category-btn" id="btnMarisqueria" onclick="switchCategory('Marisquería')">Marisquería</button>
+</section>
+
+<!-- Contenedor para subcategorías de marisquería (oculto inicialmente) -->
+<div id="subcategoriaBar" class="subcategory-bar" style="display: none;">
+  <button class="subcat-btn active" onclick="switchSubcategoria('')">Todas</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Antojitos')">Antojitos</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Mojarras')">Mojarras</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Cocteles')">Cocteles</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Filetes')">Filetes</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Sushi y Onigiri')">Sushi y Onigiri</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Camarones')">Camarones</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Tostadas')">Tostadas</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Ensaladas y Papas')">Ensaladas y Papas</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Postres')">Postres</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Paquetes para Compartir')">Paquetes para Compartir</button>
+  <button class="subcat-btn" onclick="switchSubcategoria('Bebidas')">Bebidas</button>
+</div>
+
+<!-- Contenedor para mensaje de subcategoría (oculto por defecto) -->
+<div id="subcategoryMessage" class="subcategory-message" style="display: none;">
+  <div class="message-content"></div>
+</div>
+
+    <section>
+      <h3 class="section-title">Productos</h3>
+      <div id="productos" class="products-grid"></div>
+    </section>
+
+<section class="cart-card">
+  <div class="cart-top">
+    <div>
+      <h3 class="section-title">Tu carrito</h3>
+      <p class="cart-subtitle">Revisa tus productos antes de enviar el pedido.</p>
+    </div>
+    <div class="cart-count" id="cartCount">0 productos</div>
+  </div>
+
+  <div id="carrito" class="cart-list"></div>
+
+  <div class="cart-summary">
+    <div class="summary-row">
+      <span>Subtotal</span>
+      <strong>$<span id="subtotal">0.00</span></strong>
+    </div>
+    <div class="summary-row">
+      <span>Envío</span>
+      <strong id="shipping">GRATIS</strong>
+    </div>
+    <div class="summary-row total-row">
+      <span>Total</span>
+      <strong>$<span id="total">0.00</span></strong>
+    </div>
+  </div>
+</section>
+<!-- Botón flotante del carrito -->
+<div id="cartFloatingBtn" class="cart-floating-btn">
+  <i class="fas fa-shopping-cart"></i>
+  <span id="cartCountBadge" class="cart-badge">0</span>
+</div>
+
+<div id="cartModal" class="cart-modal">
+  <div class="cart-modal-content">
+    <div class="cart-modal-header">
+      <h3>🛒 Tu carrito</h3>
+      <span class="close-modal">&times;</span>
+    </div>
+    <div class="cart-modal-scrollable">
+      <div id="cartModalBody" class="cart-modal-body">
+        <!-- Aquí se cargan dinámicamente los items del carrito -->
+      </div>
+      <div class="checkout-form">
+        <button id="modalUbicacionBtn" class="small-btn cart-btn" onclick="obtenerUbicacion()">Usar mi ubicación 📍</button>
+        <p id="ubicacion" class="muted-text">Sin ubicación capturada.</p>
+
+        <div class="form-grid">
+          <div class="field">
+            <input id="nombreCliente" type="text" placeholder="Nombre del cliente" />
+            <small class="error-msg" id="error-nombreCliente"></small>
+          </div>
+          <div class="field">
+            <input id="telefonoCliente" type="tel" placeholder="Teléfono" />
+            <small class="error-msg" id="error-telefonoCliente"></small>
+          </div>
+          <div class="field form-full">
+            <textarea id="direccionCliente" placeholder="Referencias del Domicilio, ejemplo: fachada, negocios cercanos etc"></textarea>
+            <small class="error-msg" id="error-direccionCliente"></small>
+          </div>
+          <div class="field">
+            <select id="metodoPago">
+              <option value="">Método de pago</option>
+              <option value="Transferencia">Transferencia</option>
+              <option value="Efectivo">Efectivo</option>
+            </select>
+            <small class="error-msg" id="error-metodoPago"></small>
+          </div>
+          <div class="field">
+            <input id="notasPedido" type="text" placeholder="Notas adicionales (opcional)" />
+            <small class="error-msg" id="error-notasPedido"></small>
+          </div>
+        </div>
+
+        <button id="modalEnviarPedido" class="secondary-btn cart-btn" onclick="enviarPedido()">Enviar pedido por WhatsApp</button>
+      </div>
+    </div>
+    <div class="cart-modal-footer">
+      <div class="cart-summary-modal">
+        <div class="summary-row">
+          <span>Subtotal</span>
+          <strong>$<span id="modalSubtotal">0.00</span></strong>
+        </div>
+        <div class="summary-row">
+          <span>Envío</span>
+          <strong>GRATIS</strong>
+        </div>
+        <div class="summary-row total-row">
+          <span>Total</span>
+          <strong>$<span id="modalTotal">0.00</span></strong>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+      <!-- Formulario completo dentro del modal -->
+      <div class="modal-form">
+        <button id="modalUbicacionBtn" class="small-btn" style="width:100%; margin-bottom:12px;">Usar mi ubicación 📍</button>
+        <p id="modalUbicacionText" class="muted-text">Sin ubicación capturada.</p>
+
+        <div class="form-grid">
+          <div class="field">
+            <input id="modalNombreCliente" type="text" placeholder="Nombre del cliente" />
+            <small class="error-msg" id="error-modalNombreCliente"></small>
+          </div>
+          <div class="field">
+            <input id="modalTelefonoCliente" type="tel" placeholder="Teléfono" />
+            <small class="error-msg" id="error-modalTelefonoCliente"></small>
+          </div>
+          <div class="field form-full">
+            <textarea id="modalDireccionCliente" placeholder="Referencias del Domicilio, ejemplo: fachada, negocios cercanos etc"></textarea>
+            <small class="error-msg" id="error-modalDireccionCliente"></small>
+          </div>
+          <div class="field">
+            <select id="modalMetodoPago">
+              <option value="">Método de pago</option>
+              <option value="Transferencia">Transferencia</option>
+              <option value="Efectivo">Efectivo</option>
+            </select>
+            <small class="error-msg" id="error-modalMetodoPago"></small>
+          </div>
+          <div class="field">
+            <input id="modalNotasPedido" type="text" placeholder="Notas adicionales (opcional)" />
+            <small class="error-msg" id="error-modalNotasPedido"></small>
+          </div>
+        </div>
+
+        <button id="modalEnviarPedidoBtn" class="secondary-btn" style="width:100%; margin-top:16px;">Enviar pedido por WhatsApp</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="footer-content">
+    <div class="footer-about">
+      <h3>🐟 Fish-Mar</h3>
+      <p>En FishMar nos dedicamos a ofrecer productos del mar frescos y de la mejor calidad, llevando hasta tu mesa el sabor auténtico de la costa. Nuestro compromiso es brindarte un servicio confiable, rápido y accesible, cuidando cada detalle desde la selección hasta la entrega. <span class="thankyou-text">Gracias por confiar en nosotros y ser parte de la experiencia FishMar.</span></p>
+    </div>
+
+    <div class="footer-contact">
+      <h3><i class="fas fa-phone-alt"></i> Contacto</h3>
+      <p><i class="far fa-clock"></i> Horario: 10:00 a.m. – 7:00 p.m.</p>
+      <p><i class="fas fa-phone"></i> Teléfono: <a href="tel:5569080488">(55) 6908 0488</a></p>
+      <p><i class="fas fa-map-marker-alt"></i> Pirules Mz 004, Alfredo del Mazo,<br>56577 Ixtapaluca, Méx.</p>
+    </div>
+
+    <div class="footer-social">
+      <h3><i class="fas fa-share-alt"></i> Síguenos</h3>
+      <div class="social-icons">
+        <a href="https://www.facebook.com/fish.mar.ixtapaluca/" target="_blank" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+        <a href="https://www.facebook.com/fish.mar.ixtapaluca/" target="_blank" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+        <a href="https://www.facebook.com/fish.mar.ixtapaluca/" target="_blank" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+      </div>
+      <p class="footer-note">¡Comparte la frescura del mar!</p>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <p>Fish-Mar "Pescados & Mariscos" · 2026 · Creado por Eduardo Chavez <i class="fas fa-heart" style="color: #ff6b6b;"></i></p>
+  </div>
+</footer>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
