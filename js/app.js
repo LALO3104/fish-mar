@@ -657,7 +657,6 @@ function createDots() {
     dotsContainer.appendChild(dot);
   });
 }
-
 function updateDots() {
   document.querySelectorAll('.dot').forEach((dot, idx) => {
     dot.classList.toggle('active', idx === currentSlide);
