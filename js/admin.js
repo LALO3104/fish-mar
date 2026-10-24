@@ -21,6 +21,35 @@ function setCargando(cargando) {
     : 'Entrar <i class="fa-solid fa-arrow-right"></i>';
 }
 
+// Lleva a cada quien a su pantalla. Devuelve false si no tiene puesto válido.
+async function redirigirSegunRol(userId) {
+  const { data: roleRow, error: roleError } = await supabaseClient
+    .from("user_roles")
+    .select("role, is_superadmin")
+    .eq("user_id", userId)
+    .single();
+
+  if (roleError || !roleRow) {
+    mostrarError("Tu usuario no tiene un puesto asignado. Pide ayuda al administrador.");
+    await supabaseClient.auth.signOut();
+    return false;
+  }
+
+  const rol = roleRow.role;
+  if (rol === "admin" || rol === "superadmin" || roleRow.is_superadmin) {
+    window.location.replace("dashboard.html");
+  } else if (rol === "repartidor") {
+    window.location.replace("repartidor.html");
+  } else if (rol === "mesero") {
+    window.location.replace("mesero.html");
+  } else {
+    mostrarError("Tu puesto no es válido. Pide ayuda al administrador.");
+    await supabaseClient.auth.signOut();
+    return false;
+  }
+  return true;
+}
+
 async function login() {
   limpiarError();
 
@@ -61,30 +90,7 @@ async function login() {
       return;
     }
 
-    const { data: roleRow, error: roleError } = await supabaseClient
-      .from("user_roles")
-      .select("role, is_superadmin")
-      .eq("user_id", data.user.id)
-      .single();
-
-    if (roleError || !roleRow) {
-      mostrarError("Tu usuario no tiene un puesto asignado. Pide ayuda al administrador.");
-      await supabaseClient.auth.signOut();
-      return;
-    }
-
-    // Llevar a cada quien a su pantalla
-    const rol = roleRow.role;
-    if (rol === "admin" || rol === "superadmin" || roleRow.is_superadmin) {
-      window.location.href = "dashboard.html";
-    } else if (rol === "repartidor") {
-      window.location.href = "repartidor.html";
-    } else if (rol === "mesero") {
-      window.location.href = "mesero.html";
-    } else {
-      mostrarError("Tu puesto no es válido. Pide ayuda al administrador.");
-      await supabaseClient.auth.signOut();
-    }
+    await redirigirSegunRol(data.user.id);
   } catch (err) {
     console.error("Error inesperado:", err);
     mostrarError("No hay conexión. Revisa tu internet e inténtalo de nuevo.");
@@ -110,3 +116,16 @@ document.getElementById("togglePassword")?.addEventListener("click", () => {
 
 document.getElementById("email")?.addEventListener("input", limpiarError);
 document.getElementById("password")?.addEventListener("input", limpiarError);
+
+// Si ya hay una sesión abierta (por ejemplo, al abrir la app instalada), entrar directo
+(async function entrarSiHaySesion() {
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    if (!data?.session) return;
+    setCargando(true);
+    const ok = await redirigirSegunRol(data.session.user.id);
+    if (!ok) setCargando(false);
+  } catch (err) {
+    setCargando(false);
+  }
+})();

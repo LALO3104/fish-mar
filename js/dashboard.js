@@ -99,8 +99,8 @@ async function verificarSesionAdmin() {
   return true;
 }
 
-function logout() {
-  supabaseClient.auth.signOut();
+async function logout() {
+  try { await supabaseClient.auth.signOut(); } catch (e) { /* sin conexión: igual salir */ }
   window.location.href = "admin.html";
 }
 

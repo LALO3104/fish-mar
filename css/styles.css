@@ -1428,3 +1428,32 @@ body.admin .admin-page { padding-bottom: calc(96px + env(safe-area-inset-bottom)
 .product-row.is-out .title { color: var(--ink-3); }
 .product-row.is-out .switch-label { color: var(--danger); }
 .caja-linea { padding: 8px 0; border-bottom: 1px dashed var(--line); } .caja-linea:last-child { border-bottom: 0; } .caja-linea i { width: 20px; color: var(--ink-3); }
+
+/* =====================================================================
+   Instalar como app
+   ===================================================================== */
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--brand);
+  border-radius: var(--r-lg);
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.install-banner img { border-radius: 12px; flex-shrink: 0; }
+.install-banner strong { display: block; font-size: .95rem; line-height: 1.25; }
+.install-banner span { display: block; font-size: .82rem; color: var(--ink-2); line-height: 1.3; }
+.install-close {
+  width: 36px; height: 36px; border: 0; border-radius: 50%;
+  background: var(--surface-2); font-size: 1.2rem; cursor: pointer; flex-shrink: 0;
+}
+.auth-install { width: 100%; max-width: 420px; margin: 16px auto 0; }
+.install-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.install-steps li { display: flex; align-items: center; gap: 14px; font-size: 1rem; }
+.step-icon {
+  width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+  background: var(--brand-soft); color: var(--brand-ink);
+  display: grid; place-items: center; font-size: 1.2rem;
+}

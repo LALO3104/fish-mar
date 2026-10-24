@@ -52,7 +52,7 @@ async function verificarSesionMesero() {
 
 async function logout() {
   await guardarPendiente();
-  await supabaseClient.auth.signOut();
+  try { await supabaseClient.auth.signOut(); } catch (e) { /* sin conexión: igual salir */ }
   window.location.href = "admin.html";
 }
 

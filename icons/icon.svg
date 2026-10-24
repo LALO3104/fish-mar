@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0d2a38"/>
+  <circle cx="256" cy="256" r="196" fill="#0b7a75" opacity=".28"/>
+  <g transform="translate(276 248)">
+    <!-- aleta de arriba -->
+    <path d="M-30 -60 Q 10 -118 66 -62 Z" fill="#e2552f"/>
+    <!-- cola -->
+    <path d="M-104 0 L-176 -74 Q -150 0 -176 74 Z" fill="#ffffff"/>
+    <!-- cuerpo -->
+    <path d="M-118 0 C -64 -96, 84 -96, 132 0 C 84 96, -64 96, -118 0 Z" fill="#ffffff"/>
+    <!-- branquia -->
+    <path d="M 34 -54 Q 6 0 34 54" stroke="#0b7a75" stroke-width="13" fill="none" stroke-linecap="round"/>
+    <!-- ojo -->
+    <circle cx="80" cy="-18" r="15" fill="#0d2a38"/>
+  </g>
+  <!-- olas -->
+  <path d="M120 372 q 34 -22 68 0 t 68 0 t 68 0 t 68 0" stroke="#7fd3cc" stroke-width="14" fill="none" stroke-linecap="round"/>
+</svg>
