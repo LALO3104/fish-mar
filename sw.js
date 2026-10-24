@@ -2,7 +2,7 @@
 // Siempre intenta primero la versión más nueva (red) y solo si no hay
 // conexión usa la copia guardada. Las llamadas a Supabase no se guardan.
 
-const CACHE = "fishmar-v1";
+const CACHE = "fishmar-v2";
 const ARCHIVOS = [
   "/admin.html",
   "/mesero.html",
@@ -16,6 +16,7 @@ const ARCHIVOS = [
   "/js/mesero.js",
   "/js/repartidor.js",
   "/js/dashboard.js",
+  "/js/negocio.js",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/manifest.webmanifest"

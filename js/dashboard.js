@@ -1305,6 +1305,7 @@ function setupTabs() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       if (tabId === "ventaslocal") cargarVentasLocal();
       if (tabId === "metricas") actualizarMetricasPeriodo();
+      if (tabId === "negocio" && typeof abrirNegocio === "function") abrirNegocio();
     });
   });
 }
@@ -1342,7 +1343,7 @@ $("btnConfirmarEliminarLocal").addEventListener("click", eliminarPedidoLocalConf
   if (!ok) return;
 
   if (esSuperAdmin) {
-    $("tabUsuariosBtn").hidden = false;
+    $("tabNegocioBtn").hidden = false;
     $("tabbar").style.setProperty("--tabs", 5);
   }
   setupTabs();

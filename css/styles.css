@@ -1457,3 +1457,50 @@ body.admin .admin-page { padding-bottom: calc(96px + env(safe-area-inset-bottom)
   background: var(--brand-soft); color: var(--brand-ink);
   display: grid; place-items: center; font-size: 1.2rem;
 }
+
+/* =====================================================================
+   Negocio (costos y ganancias)
+   ===================================================================== */
+.group-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin: 0 2px 8px; }
+.list-item .right { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.rank {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: var(--brand-soft); color: var(--brand-ink);
+  display: grid; place-items: center; font-weight: 800; font-size: .85rem;
+}
+.profit-card {
+  background: linear-gradient(135deg, #0b7a75, #075753);
+  color: #fff;
+  border-radius: var(--r-lg);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--shadow);
+}
+.profit-card.loss { background: linear-gradient(135deg, #c2372b, #8f2219); }
+.profit-card .small { opacity: .85; }
+.money-row { padding: 6px 0; }
+.money-row.minus strong { color: var(--danger); }
+.money-row.total { border-top: 1.5px solid var(--line); padding-top: 10px; font-size: 1.05rem; }
+.money-row.total.neg strong { color: var(--danger); }
+.recipe-line {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 10px 10px 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.recipe-line .title { font-weight: 700; line-height: 1.25; }
+.qty-edit { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.qty-edit .input { width: 78px; min-height: 44px; padding: 8px; text-align: center; font-weight: 700; }
+.qty-edit span { font-size: .85rem; color: var(--ink-2); min-width: 30px; }
+.tag-llevar { color: var(--route); font-weight: 700; }
+.check-line { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.check-line input { width: 22px; height: 22px; accent-color: var(--brand); flex-shrink: 0; }
+.big-line { font-size: 1.1rem; font-weight: 800; align-items: center; }
+.big-line .badge { margin-left: 6px; vertical-align: middle; }
+.wrap-chips { flex-wrap: wrap; overflow: visible; }
+.options.three { grid-template-columns: repeat(3, minmax(0, 1fr)); } .options.three .option-box { flex-direction: column; justify-content: center; gap: 4px; padding: 10px 6px; text-align: center; }

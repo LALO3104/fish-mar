@@ -40,7 +40,7 @@
   <button class="tab-btn" data-tab="productos"><i class="fa-solid fa-fish"></i><span>Productos</span></button>
   <button class="tab-btn" data-tab="metricas"><i class="fa-solid fa-chart-line"></i><span>Ventas</span></button>
   <button class="tab-btn" data-tab="ventaslocal"><i class="fa-solid fa-cash-register"></i><span>Caja</span></button>
-  <button class="tab-btn" data-tab="usuarios" id="tabUsuariosBtn" hidden><i class="fa-solid fa-users"></i><span>Usuarios</span></button>
+  <button class="tab-btn" data-tab="negocio" id="tabNegocioBtn" hidden><i class="fa-solid fa-sack-dollar"></i><span>Negocio</span></button>
 </nav>
 
 <main class="page page-wide admin-page">
@@ -183,18 +183,221 @@
     <div id="listaVentasLocal" class="list mt-8"></div>
   </section>
 
-  <!-- ============ USUARIOS (solo superadmin) ============ -->
-  <section id="tabUsuarios" class="tab-pane">
+  <!-- ============ NEGOCIO (solo dueños) ============ -->
+  <section id="tabNegocio" class="tab-pane">
     <div class="section-head">
       <div>
-        <h2 class="section-title">Usuarios</h2>
-        <p class="section-sub">Quién puede entrar al sistema</p>
+        <h2 class="section-title">Negocio</h2>
+        <p class="section-sub">Costos, ganancias y usuarios · solo dueños</p>
       </div>
-      <button class="btn btn-primary" onclick="mostrarModalCrearUsuario()"><i class="fa-solid fa-user-plus"></i> Nuevo</button>
     </div>
-    <div id="listaUsuarios" class="list"></div>
+    <div class="chips" id="negocioChips">
+      <button class="chip is-active" data-sec="ganancias"><i class="fa-solid fa-chart-pie"></i> Ganancias</button>
+      <button class="chip" data-sec="insumos"><i class="fa-solid fa-carrot"></i> Insumos</button>
+      <button class="chip" data-sec="recetas"><i class="fa-solid fa-book-open"></i> Recetas</button>
+      <button class="chip" data-sec="gastos"><i class="fa-solid fa-receipt"></i> Gastos</button>
+      <button class="chip" data-sec="usuarios"><i class="fa-solid fa-users"></i> Usuarios</button>
+    </div>
+
+    <!-- Ganancias -->
+    <div class="neg-sec mt-16" id="sec-ganancias">
+      <div class="chips" id="gananciasPeriodo">
+        <button class="chip" data-periodo="hoy">Hoy</button>
+        <button class="chip" data-periodo="semana">Esta semana</button>
+        <button class="chip is-active" data-periodo="mes">Este mes</button>
+        <button class="chip" data-periodo="mesPasado">Mes pasado</button>
+        <button class="chip" data-periodo="elegir"><i class="fa-regular fa-calendar"></i> Elegir</button>
+      </div>
+      <div id="gananciasFechas" class="card mt-8" hidden>
+        <div class="row">
+          <div class="field grow"><label for="ganDesde" class="small">Desde</label><input type="date" id="ganDesde" class="input" /></div>
+          <div class="field grow"><label for="ganHasta" class="small">Hasta</label><input type="date" id="ganHasta" class="input" /></div>
+        </div>
+        <button class="btn btn-primary btn-block mt-8" onclick="cargarGanancias()">Ver ganancias</button>
+      </div>
+      <div id="gananciasContenido" class="stack mt-16"></div>
+    </div>
+
+    <!-- Insumos -->
+    <div class="neg-sec mt-16" id="sec-insumos" hidden>
+      <div class="row">
+        <div class="search grow">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" id="buscarInsumo" class="input" placeholder="Buscar insumo" />
+        </div>
+        <button class="btn btn-primary" onclick="abrirInsumo()"><i class="fa-solid fa-plus"></i> Nuevo</button>
+      </div>
+      <p class="small muted mt-8">Todo lo que compras para preparar: pescado, verdura, aceite, tortillas, desechables…</p>
+      <div id="listaInsumos" class="stack mt-16"></div>
+    </div>
+
+    <!-- Recetas -->
+    <div class="neg-sec mt-16" id="sec-recetas" hidden>
+      <div class="chips" id="recetasTipo">
+        <button class="chip is-active" data-tipo="platillos">Platillos</button>
+        <button class="chip" data-tipo="preparaciones">Preparaciones compartidas</button>
+      </div>
+      <div class="row mt-8">
+        <div class="search grow">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="search" id="buscarReceta" class="input" placeholder="Buscar" />
+        </div>
+        <button class="btn btn-primary" id="btnNuevaPreparacion" onclick="nuevaPreparacion()" hidden><i class="fa-solid fa-plus"></i> Nueva</button>
+      </div>
+      <p class="small muted mt-8" id="recetasAyuda"></p>
+      <div id="listaRecetas" class="list mt-16"></div>
+    </div>
+
+    <!-- Gastos -->
+    <div class="neg-sec mt-16" id="sec-gastos" hidden>
+      <div class="row">
+        <div class="field grow">
+          <label for="gastosMes" class="sr-only">Mes</label>
+          <input type="month" id="gastosMes" class="input" />
+        </div>
+        <button class="btn btn-primary" onclick="abrirGasto()"><i class="fa-solid fa-plus"></i> Registrar</button>
+      </div>
+      <div class="stat highlight mt-16"><div class="stat-label">Gastos del mes</div><div class="stat-value" id="gastosTotalMes">$0.00</div></div>
+      <div id="listaGastos" class="list mt-16"></div>
+    </div>
+
+    <!-- Usuarios -->
+    <div class="neg-sec mt-16" id="sec-usuarios" hidden>
+      <div class="row-between">
+        <p class="small muted">Quién puede entrar al sistema</p>
+        <button class="btn btn-primary" onclick="mostrarModalCrearUsuario()"><i class="fa-solid fa-user-plus"></i> Nuevo</button>
+      </div>
+      <div id="listaUsuarios" class="list mt-16"></div>
+    </div>
   </section>
 </main>
+
+<!-- Hoja: insumo -->
+<div id="modalInsumo" class="modal" onclick="if (event.target === this) cerrarInsumo()">
+  <div class="sheet full">
+    <div class="sheet-header">
+      <h3 class="sheet-title" id="tituloInsumo">Nuevo insumo</h3>
+      <button class="sheet-close" onclick="cerrarInsumo()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label for="insNombre">Nombre</label>
+        <input id="insNombre" class="input" type="text" maxlength="80" placeholder="Ej. Jitomate, Mojarra, Charola chica" />
+      </div>
+      <div class="field">
+        <label for="insCategoria">Categoría</label>
+        <select id="insCategoria" class="select">
+          <option>Pescados y mariscos</option>
+          <option>Verduras y frutas</option>
+          <option>Abarrotes</option>
+          <option>Lácteos</option>
+          <option>Bebidas</option>
+          <option>Desechables</option>
+          <option>Otros</option>
+        </select>
+      </div>
+      <div class="field">
+        <span class="label">Se compra por</span>
+        <div class="options three" id="insUnidad">
+          <label class="option"><input type="radio" name="insUnidad" value="kg" checked /><span class="option-box"><i class="fa-solid fa-weight-hanging"></i> Kilo</span></label>
+          <label class="option"><input type="radio" name="insUnidad" value="l" /><span class="option-box"><i class="fa-solid fa-bottle-water"></i> Litro</span></label>
+          <label class="option"><input type="radio" name="insUnidad" value="pieza" /><span class="option-box"><i class="fa-solid fa-cubes"></i> Pieza</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="insCosto">Costo por <span id="insUnidadTexto">kilo</span></label>
+        <input id="insCosto" class="input" type="number" inputmode="decimal" step="0.01" min="0" placeholder="$" />
+      </div>
+      <details class="more card card-flat" id="insCalculadora">
+        <summary><span><i class="fa-solid fa-calculator"></i> No sé el costo por <span class="ins-unidad-txt">kilo</span>: calcularlo</span></summary>
+        <div class="stack-sm mt-8">
+          <div class="row">
+            <div class="field grow"><label for="calcCantidad" class="small">¿Cuánto compraste? (<span class="ins-unidad-txt">kilo</span>s)</label>
+              <input id="calcCantidad" class="input" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ej. 5" /></div>
+            <div class="field grow"><label for="calcTotal" class="small">¿Cuánto pagaste?</label>
+              <input id="calcTotal" class="input" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ej. 450" /></div>
+          </div>
+          <button class="btn btn-soft btn-block" type="button" onclick="calcularCostoInsumo()">Calcular costo</button>
+        </div>
+      </details>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-lg btn-block" id="btnGuardarInsumo" onclick="guardarInsumo()"><i class="fa-solid fa-check"></i> Guardar insumo</button>
+      <button class="btn btn-text danger" id="btnBorrarInsumo" onclick="borrarInsumo()" hidden><i class="fa-solid fa-trash-can"></i> Borrar insumo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hoja: receta de un platillo o preparación -->
+<div id="modalReceta" class="modal" onclick="if (event.target === this) cerrarReceta()">
+  <div class="sheet full wide">
+    <div class="sheet-header">
+      <div class="grow">
+        <h3 class="sheet-title" id="tituloReceta">Receta</h3>
+        <div class="small muted" id="subtituloReceta"></div>
+      </div>
+      <button class="sheet-close" onclick="cerrarReceta()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field" id="campoNombrePrep" hidden>
+        <label for="nombrePrep">Nombre de la preparación</label>
+        <input id="nombrePrep" class="input" type="text" maxlength="80" placeholder="Ej. Guarnición: ensalada + papas" />
+        <span class="hint">Escribe lo que lleva <strong>una porción</strong>.</span>
+      </div>
+      <div id="lineasReceta" class="list"></div>
+
+      <div class="card stack-sm">
+        <label class="label" for="recInsumo">Agregar ingrediente</label>
+        <select id="recInsumo" class="select"></select>
+        <div class="row">
+          <input id="recCantidad" class="input grow" type="number" inputmode="decimal" step="any" min="0" placeholder="Cantidad" />
+          <select id="recUnidad" class="select" style="width:auto;"></select>
+        </div>
+        <label class="check-line" id="recLlevarLinea">
+          <input type="checkbox" id="recLlevar" />
+          <span>Solo en pedidos <strong>para llevar</strong> (desechables)</span>
+        </label>
+        <button class="btn btn-soft btn-block" type="button" onclick="agregarLineaReceta()"><i class="fa-solid fa-plus"></i> Agregar</button>
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <div id="resumenReceta" class="stack-sm small"></div>
+      <button class="btn btn-primary btn-lg btn-block" id="btnGuardarReceta" onclick="guardarReceta()"><i class="fa-solid fa-check"></i> Guardar receta</button>
+      <button class="btn btn-text danger" id="btnBorrarPrep" onclick="borrarPreparacion()" hidden><i class="fa-solid fa-trash-can"></i> Borrar preparación</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hoja: gasto -->
+<div id="modalGasto" class="modal" onclick="if (event.target === this) cerrarGasto()">
+  <div class="sheet">
+    <div class="sheet-header">
+      <h3 class="sheet-title">Registrar gasto</h3>
+      <button class="sheet-close" onclick="cerrarGasto()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <span class="label">¿De qué es?</span>
+        <div class="chips wrap-chips" id="gastoCategorias"></div>
+      </div>
+      <div class="field">
+        <label for="gastoMonto">Monto</label>
+        <input id="gastoMonto" class="input" type="number" inputmode="decimal" step="0.01" min="0" placeholder="$" />
+      </div>
+      <div class="field">
+        <label for="gastoConcepto">Detalle (opcional)</label>
+        <input id="gastoConcepto" class="input" type="text" maxlength="120" placeholder="Ej. Sueldo de Luis, semana 1" />
+      </div>
+      <div class="field">
+        <label for="gastoFecha">Fecha</label>
+        <input id="gastoFecha" class="input" type="date" />
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-lg btn-block" id="btnGuardarGasto" onclick="guardarGasto()"><i class="fa-solid fa-check"></i> Guardar gasto</button>
+    </div>
+  </div>
+</div>
 
 <!-- Hoja: producto nuevo / editar -->
 <div id="modalProducto" class="modal" onclick="if (event.target === this) cerrarModalProducto()">
@@ -411,6 +614,7 @@
 <script src="js/supabase.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/dashboard.js"></script>
+<script src="js/negocio.js"></script>
 <script src="js/pwa.js"></script>
 </body>
 </html>
