@@ -1,85 +1,18 @@
+// js/repartidor.js
+
 let pedidosRepartidor = [];
 let userIdActual = null;
 let nombreRepartidor = "";
+let fechaFiltro = "";   // Fecha seleccionada en formato YYYY-MM-DD
 
-function getHoy() {
-  return new Date().toISOString().split("T")[0];
-}
-
-function getFechaPedido(p) {
-  if (p.created_at) {
-    const d = new Date(p.created_at);
-    if (!isNaN(d.getTime())) return d;
-  }
-
-  if (p.fecha) {
-    const d = new Date(`${p.fecha}T00:00:00`);
-    if (!isNaN(d.getTime())) return d;
-  }
-
-  return null;
-}
-
-function formatearFechaPedido(p) {
-  if (p.created_at) {
-    const fecha = new Date(p.created_at);
-    // Formato: 22/03/2026, 02:40:38 p.m.
-    return fecha.toLocaleString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      hour12: true
-    });
-  }
-  if (p.fecha) {
-    return p.fecha;
-  }
-  return "Sin fecha";
-}
-
-function calcularTiempoPedido(p) {
-  const d = getFechaPedido(p);
-  if (!d) return "Sin tiempo";
-
-  const ahora = new Date();
-  const diffMs = ahora - d;
-  const diffMin = Math.floor(diffMs / 60000);
-
-  if (diffMin < 1) return "Hace unos segundos";
-  if (diffMin < 60) return `Hace ${diffMin} min`;
-
-  const horas = Math.floor(diffMin / 60);
-  if (horas < 24) return `Hace ${horas} h`;
-
-  const dias = Math.floor(horas / 24);
-  return `Hace ${dias} día(s)`;
-}
-
-function getEstadoClass(estado, fechaPedido) {
-  let clase = "";
-
-  if (estado === "Recibido") clase = "recibido";
-  if (estado === "En proceso") clase = "enproceso";
-  if (estado === "El repartidor está en camino") clase = "encamino";
-  if (estado === "Entregado") clase = "entregado";
-
-  const d = fechaPedido ? new Date(fechaPedido) : null;
-  if (d && !isNaN(d.getTime())) {
-    const ahora = new Date();
-    const diffMin = Math.floor((ahora - d) / 60000);
-
-    if (diffMin >= 30 && estado !== "Entregado") {
-      clase += " urgente";
-    } else if (diffMin >= 20 && estado !== "Entregado") {
-      clase += " alerta";
-    }
-  }
-
-  return clase.trim();
-}
-
+// ======================
+// VERIFICACIÓN DE SESIÓN
+// ======================
 async function verificarSesion() {
   const { data, error } = await supabaseClient.auth.getUser();
 
   if (error || !data?.user) {
+    showToast("No hay sesión activa. Redirigiendo al login.");
     window.location.href = "admin.html";
     return false;
   }
@@ -93,6 +26,7 @@ async function verificarSesion() {
     .single();
 
   if (rolError || !rolData || rolData.role !== "repartidor") {
+    handleError(rolError, "Tu usuario no tiene rol de repartidor.");
     window.location.href = "admin.html";
     return false;
   }
@@ -107,24 +41,39 @@ async function verificarSesion() {
   return true;
 }
 
+// ======================
+// PEDIDOS Y FILTROS
+// ======================
 async function cargarPedidosRepartidor() {
   const ok = await verificarSesion();
   if (!ok) return;
 
-  const { data, error } = await supabaseClient
+  const fechaInput = document.getElementById("filtroFechaRepartidor");
+  fechaFiltro = fechaInput ? fechaInput.value : "";
+
+  let query = supabaseClient
     .from("pedidos")
     .select("*")
     .eq("repartidor_id", userIdActual)
+    .neq('tipo_pedido', 'local')
     .order("created_at", { ascending: false });
 
+  if (fechaFiltro) {
+    query = query.gte("created_at", `${fechaFiltro}T00:00:00-06:00`)
+                 .lt("created_at", `${fechaFiltro}T23:59:59-06:00`);
+  }
+
+  const { data, error } = await query;
+
   if (error) {
-    console.error(error);
+    handleError(error, "Error al cargar tus pedidos.");
     return;
   }
 
   pedidosRepartidor = data || [];
   renderPedidosRepartidor();
   actualizarStatsRepartidor();
+  await actualizarResumenEfectivo();
 }
 
 function renderPedidosRepartidor() {
@@ -132,7 +81,7 @@ function renderPedidosRepartidor() {
   if (!cont) return;
 
   if (!pedidosRepartidor.length) {
-    cont.innerHTML = `<div class="panel">No tienes pedidos asignados.</div>`;
+    cont.innerHTML = `<div class="panel">No tienes pedidos asignados para este filtro.</div>`;
     return;
   }
 
@@ -161,21 +110,16 @@ function renderPedidosRepartidor() {
           </div>
           <span class="estado-badge ${estadoClass}">${p.estado}</span>
         </div>
-
         <div class="pedido-body">
           <p>📍 ${p.direccion}</p>
           <p>💳 ${p.metodo_pago}</p>
           <p>💰 <strong>$${Number(p.total).toFixed(2)}</strong></p>
           <p>📝 ${p.notas || "Sin notas"}</p>
-
           <div class="pedido-items">
             <strong>Productos:</strong>
-            <ul>
-              ${itemsHtml}
-            </ul>
+            <ul>${itemsHtml}</ul>
           </div>
         </div>
-
         <div class="pedido-actions">
           <select onchange="cambiarEstado(${p.id}, this.value)">
             <option ${p.estado === "Recibido" ? "selected" : ""}>Recibido</option>
@@ -183,7 +127,6 @@ function renderPedidosRepartidor() {
             <option ${p.estado === "El repartidor está en camino" ? "selected" : ""}>El repartidor está en camino</option>
             <option ${p.estado === "Entregado" ? "selected" : ""}>Entregado</option>
           </select>
-
           <a href="${mapa}" target="_blank" class="map-btn">Mapa</a>
         </div>
       </div>
@@ -198,12 +141,12 @@ async function cambiarEstado(id, nuevoEstado) {
     .eq("id", id);
 
   if (error) {
-    console.error(error);
-    alert("No se pudo actualizar el pedido.");
+    handleError(error, "No se pudo actualizar el pedido.");
     return;
   }
 
-  cargarPedidosRepartidor();
+  showToast("Estado actualizado correctamente", "success");
+  await cargarPedidosRepartidor();
 }
 
 function actualizarStatsRepartidor() {
@@ -211,13 +154,220 @@ function actualizarStatsRepartidor() {
   const enCamino = pedidosRepartidor.filter(p => p.estado === "El repartidor está en camino").length;
   const entregados = pedidosRepartidor.filter(p => p.estado === "Entregado").length;
 
-  const statAsignados = document.getElementById("statAsignados");
-  const statCamino = document.getElementById("statCamino");
-  const statEntregadosR = document.getElementById("statEntregadosR");
+  document.getElementById("statAsignados").textContent = asignados;
+  document.getElementById("statCamino").textContent = enCamino;
+  document.getElementById("statEntregadosR").textContent = entregados;
+}
 
-  if (statAsignados) statAsignados.textContent = asignados;
-  if (statCamino) statCamino.textContent = enCamino;
-  if (statEntregadosR) statEntregadosR.textContent = entregados;
+// ======================
+// RECAUDACIÓN Y CORTES
+// ======================
+async function obtenerTotalesRecaudacionPorFecha() {
+  const pedidosEfectivoEntregados = pedidosRepartidor.filter(p => 
+    p.metodo_pago === "Efectivo" && p.estado === "Entregado"
+  );
+  const totalRecaudado = pedidosEfectivoEntregados.reduce((sum, p) => sum + Number(p.total), 0);
+
+  let totalEntregado = 0;
+  if (userIdActual) {
+    let query = supabaseClient
+      .from("repartidor_cortes")
+      .select("monto")
+      .eq("repartidor_id", userIdActual);
+
+    if (fechaFiltro) {
+      query = query.gte("fecha_corte", `${fechaFiltro}T00:00:00-06:00`)
+                   .lt("fecha_corte", `${fechaFiltro}T23:59:59-06:00`);
+    }
+
+    const { data: cortes, error } = await query;
+    if (!error && cortes) {
+      totalEntregado = cortes.reduce((sum, c) => sum + Number(c.monto), 0);
+    }
+  }
+
+  const saldo = totalRecaudado - totalEntregado;
+  return { totalRecaudado, totalEntregado, saldo };
+}
+
+async function actualizarResumenEfectivo() {
+  if (!userIdActual) return;
+  try {
+    const { totalRecaudado, totalEntregado, saldo } = await obtenerTotalesRecaudacionPorFecha();
+    document.getElementById("totalRecaudado").textContent = `$${totalRecaudado.toFixed(2)}`;
+    document.getElementById("totalEntregado").textContent = `$${totalEntregado.toFixed(2)}`;
+    document.getElementById("saldoPendiente").textContent = `$${saldo.toFixed(2)}`;
+  } catch (err) {
+    console.error("Error actualizando resumen:", err);
+  }
+}
+
+function abrirModalEntrega() {
+  document.getElementById("modalEntrega").style.display = "block";
+  document.body.style.overflow = "hidden";
+}
+
+function cerrarModalEntrega() {
+  document.getElementById("modalEntrega").style.display = "none";
+  document.body.style.overflow = "auto";
+  document.getElementById("entregaMonto").value = "";
+  document.getElementById("entregaNotas").value = "";
+}
+
+async function registrarEntrega() {
+  const montoInput = document.getElementById("entregaMonto");
+  const notasInput = document.getElementById("entregaNotas");
+  let monto = parseFloat(montoInput.value);
+  const notas = notasInput.value.trim();
+
+  if (isNaN(monto) || monto <= 0) {
+    showToast("Ingresa un monto válido mayor a 0.");
+    return;
+  }
+
+  const { saldo } = await obtenerTotalesRecaudacionPorFecha();
+  if (monto > saldo) {
+    showToast(`No puedes entregar más de $${saldo.toFixed(2)} (saldo actual para este período).`);
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("repartidor_cortes")
+    .insert([{
+      repartidor_id: userIdActual,
+      monto: monto,
+      notas: notas || null
+    }]);
+
+  if (error) {
+    handleError(error, "Error al registrar la entrega.");
+    return;
+  }
+
+  showToast(`Entrega de $${monto.toFixed(2)} registrada correctamente.`, "success");
+  cerrarModalEntrega();
+  await actualizarResumenEfectivo();
+  await cargarHistorialEntregas();
+}
+
+// ======================
+// HISTORIAL DE ENTREGAS (con filtro y eliminación)
+// ======================
+async function limpiarRegistrosAntiguos() {
+  const fechaLimite = new Date();
+  fechaLimite.setDate(fechaLimite.getDate() - 8);
+  const fechaLimiteStr = fechaLimite.toISOString();
+
+  const { error } = await supabaseClient
+    .from("repartidor_cortes")
+    .delete()
+    .lt("fecha_corte", fechaLimiteStr)
+    .eq("repartidor_id", userIdActual);
+
+  if (error) {
+    console.error("Error al limpiar registros antiguos:", error);
+  } else {
+    console.log("Registros antiguos eliminados (más de 8 días)");
+  }
+}
+
+async function cargarHistorialEntregas() {
+  if (!userIdActual) return;
+
+  await limpiarRegistrosAntiguos();
+
+  let query = supabaseClient
+    .from("repartidor_cortes")
+    .select("*")
+    .eq("repartidor_id", userIdActual)
+    .order("fecha_corte", { ascending: false });
+
+  const fechaInicio = document.getElementById("historialFechaInicio")?.value;
+  const fechaFin = document.getElementById("historialFechaFin")?.value;
+
+  if (fechaInicio) {
+    query = query.gte("fecha_corte", `${fechaInicio}T00:00:00-06:00`);
+  }
+  if (fechaFin) {
+    query = query.lte("fecha_corte", `${fechaFin}T23:59:59-06:00`);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    handleError(error, "Error al cargar historial de entregas.");
+    return;
+  }
+
+  const contenedor = document.getElementById("historialEntregas");
+  if (!contenedor) return;
+
+  if (!data || data.length === 0) {
+    contenedor.innerHTML = `<div class="panel">No hay registros de entregas en este período.</div>`;
+    return;
+  }
+
+  contenedor.innerHTML = data.map(corte => {
+    const fecha = new Date(corte.fecha_corte).toLocaleString('es-MX', {
+      timeZone: 'America/Mexico_City',
+      hour12: true
+    });
+    return `
+      <div class="admin-item">
+        <div>
+          <strong>💰 $${Number(corte.monto).toFixed(2)}</strong>
+          <p>📅 ${fecha}</p>
+          ${corte.notas ? `<p><small>📝 ${corte.notas}</small></p>` : ''}
+        </div>
+        <div class="admin-actions">
+          <button class="delete-btn" onclick="eliminarRegistroEntrega(${corte.id})">🗑️ Eliminar</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// Nueva función para eliminar un registro de entrega
+async function eliminarRegistroEntrega(id) {
+  if (!confirm("¿Estás seguro de eliminar este registro de entrega? Esta acción no se puede deshacer.")) return;
+
+  const { error } = await supabaseClient
+    .from("repartidor_cortes")
+    .delete()
+    .eq("id", id)
+    .eq("repartidor_id", userIdActual); // seguridad extra
+
+  if (error) {
+    handleError(error, "Error al eliminar el registro.");
+    return;
+  }
+
+  showToast("Registro eliminado correctamente.", "success");
+  // Recargar el historial (respeta filtros actuales)
+  await cargarHistorialEntregas();
+  // Actualizar el resumen de recaudación porque cambió el total entregado
+  await actualizarResumenEfectivo();
+}
+
+function limpiarFiltroHistorial() {
+  document.getElementById("historialFechaInicio").value = "";
+  document.getElementById("historialFechaFin").value = "";
+  cargarHistorialEntregas();
+}
+
+// ======================
+// UTILIDADES PARA FILTROS DE PEDIDOS
+// ======================
+function ponerHoyRepartidor() {
+  const hoy = getHoy();
+  const filtro = document.getElementById("filtroFechaRepartidor");
+  if (filtro) filtro.value = hoy;
+  cargarPedidosRepartidor();
+}
+
+function limpiarFiltroRepartidor() {
+  const filtro = document.getElementById("filtroFechaRepartidor");
+  if (filtro) filtro.value = "";
+  cargarPedidosRepartidor();
 }
 
 function logout() {
@@ -225,8 +375,16 @@ function logout() {
   window.location.href = "admin.html";
 }
 
+// ======================
+// INICIALIZACIÓN Y AUTOACTUALIZACIÓN
+// ======================
 setInterval(() => {
   cargarPedidosRepartidor();
-}, 5000);
+}, 10000);
 
-cargarPedidosRepartidor();
+(async function init() {
+  const ok = await verificarSesion();
+  if (!ok) return;
+  await cargarPedidosRepartidor();
+  await cargarHistorialEntregas();
+})();

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FishMar | Acceso</title>
+  
   <style>
     * {
       margin: 0;
@@ -106,6 +107,22 @@
       box-shadow: 0 0 0 3px rgba(14, 165, 164, 0.5);
     }
 
+    .error-message {
+      background: rgba(220, 38, 38, 0.9);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 40px;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
+      text-align: center;
+      backdrop-filter: blur(4px);
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
     .primary-btn {
       width: 100%;
       background: linear-gradient(135deg, #0ea5a4, #0b7f7e);
@@ -153,6 +170,8 @@
     <div class="auth-card">
       <h1>🐟 FishMar</h1>
       <p>Acceso de administrador y repartidor</p>
+
+      <div id="loginError" class="error-message"></div>
 
       <div class="input-icon">
         <i>📧</i>

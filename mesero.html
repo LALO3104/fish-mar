@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>FishMar | Mesero</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    /* Estilos adicionales para el panel de mesero */
+    .pedidos-lista {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .pedido-resumen {
+      background: white;
+      border-radius: 20px;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 6px solid #0ea5a4;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .pedido-resumen:hover {
+      transform: translateX(4px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .pedido-resumen.activo {
+      background: #e0f2fe;
+      border-left-color: #f59e0b;
+    }
+    .pedido-mesa {
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+    .pedido-total {
+      font-weight: 800;
+      color: #0ea5a4;
+    }
+    .acciones-pedido {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .toolbar-mesero {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .badge-abierto {
+      background: #fef3c7;
+      color: #b45309;
+      border-radius: 40px;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+      font-weight: bold;
+    }
+    .buscador {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 40px;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+    }
+    .products-grid {
+      max-height: 450px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+<header class="header">
+  <div class="header-inner">
+    <div class="logo-area">
+      <h1>👨‍🍳 Fish-Mar | Mesero</h1>
+      <p class="tagline">Toma de pedidos en sala</p>
+    </div>
+    <button class="ghost-btn" onclick="logout()">Cerrar sesión</button>
+  </div>
+</header>
+
+<main class="container">
+  <div class="dashboard-grid" style="grid-template-columns: 1fr 1.5fr;">
+    <!-- Panel izquierdo: Lista de pedidos activos -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>📋 Pedidos activos</h2>
+        <button class="primary-btn" onclick="crearNuevoPedido()">+ Nuevo pedido</button>
+      </div>
+      <div id="listaPedidosActivos" class="pedidos-lista">
+        <div class="empty-cart">No hay pedidos abiertos</div>
+      </div>
+    </div>
+
+    <!-- Panel derecho: Carrito y productos -->
+    <div class="panel">
+      <div id="pedidoSeleccionadoInfo" style="margin-bottom: 12px;">
+        <strong>Pedido actual:</strong> <span id="mesaActual">Ninguno</span>
+        <span id="estadoActualBadge" class="badge-abierto" style="margin-left: 8px;">abierto</span>
+      </div>
+      
+      <!-- Buscador de productos -->
+      <input type="text" id="buscadorProductos" class="buscador" placeholder="🔍 Buscar producto...">
+
+      <div class="category-bar" id="categoryBarMesero">
+        <button class="category-btn active" data-cat="Marisquería">🦐 Marisquería</button>
+      </div>
+      <div id="subcategoriaBarMesero" class="subcategory-bar" style="display: none;"></div>
+      <div id="productosMesero" class="products-grid"></div>
+
+      <!-- Carrito del pedido seleccionado -->
+      <div class="cart-card" style="margin-top: 20px;">
+        <h3>🛒 Pedido actual</h3>
+        <div id="carritoActual" class="cart-list"></div>
+        <div class="cart-summary">
+          <div class="summary-row">
+            <span>Total</span>
+            <strong>$<span id="totalActual">0.00</span></strong>
+          </div>
+        </div>
+        <div class="acciones-pedido">
+          <button class="primary-btn" onclick="guardarPedidoActual()">💾 Guardar cambios</button>
+          <button class="small-btn" onclick="imprimirComanda()">🖨️ Imprimir comanda</button>
+          <button class="secondary-btn" onclick="abrirModalCierre()">💰 Cerrar pedido</button>
+          <button class="delete-pedido-btn" onclick="anularPedido()">❌ Anular</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal para cerrar pedido con descuento -->
+<div id="modalCerrarPedido" class="cart-modal" style="display: none;">
+  <div class="cart-modal-content" style="max-width: 500px;">
+    <div class="cart-modal-header">
+      <h3>💵 Cerrar pedido</h3>
+      <span class="close-modal" onclick="cerrarModalCierre()">&times;</span>
+    </div>
+    <div class="cart-modal-scrollable">
+      <p><strong>Mesa:</strong> <span id="cerrarMesa"></span></p>
+      <p><strong>Subtotal:</strong> $<span id="cerrarSubtotal">0.00</span></p>
+      
+      <div style="margin: 16px 0; padding: 12px; background: #f8fafc; border-radius: 20px;">
+        <h4 style="margin: 0 0 12px 0;">🎁 Descuento</h4>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <input type="number" id="descuentoValor" placeholder="Cantidad" step="0.01" min="0" style="width: 120px; padding: 8px; border-radius: 12px; border: 1px solid #cbd5e1;">
+          <select id="descuentoTipo" style="padding: 8px; border-radius: 12px; border: 1px solid #cbd5e1;">
+            <option value="monto">Monto ($)</option>
+            <option value="porcentaje">Porcentaje (%)</option>
+          </select>
+          <button class="small-btn" onclick="aplicarDescuentoCierre()">Aplicar</button>
+          <button class="small-btn" onclick="quitarDescuentoCierre()">Quitar</button>
+        </div>
+        <div id="infoDescuentoCierre" style="margin-top: 12px;">
+          <div>Descuento: $<span id="montoDescuento">0.00</span></div>
+          <div><strong>Total a pagar: $<span id="totalConDescuento">0.00</span></strong></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Método de pago:</label>
+        <select id="metodoPagoCierre">
+          <option value="Efectivo">Efectivo</option>
+          <option value="Tarjeta">Tarjeta</option>
+          <option value="Transferencia">Transferencia</option>
+        </select>
+      </div>
+    </div>
+    <div class="cart-modal-footer">
+      <button class="secondary-btn" onclick="cerrarModalCierre()">Cancelar</button>
+      <button class="primary-btn" onclick="confirmarCierre()">Confirmar y cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+<script src="js/supabase.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/mesero.js"></script>
+</body>
+</html>

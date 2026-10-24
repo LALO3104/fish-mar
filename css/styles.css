@@ -1289,3 +1289,68 @@ body {
 .cart-modal-body {
   overflow: visible;
 }
+.editar-productos-lista {
+  margin-bottom: 16px;
+}
+.editable-item .cart-item-info {
+  flex: 1;
+}
+.agregar-producto {
+  margin: 16px 0;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+#nuevoProductoSelect {
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+}
+#nuevoProductoCantidad {
+  width: 120px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  margin-right: 8px;
+}
+.edit-pedido-btn {
+  background: #f1c40f;
+  color: #2c3e50;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.edit-pedido-btn:hover {
+  background: #e67e22;
+  color: white;
+}
+
+/* TOAST NOTIFICATIONS */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 2000;
+  animation: fadeInOut 4s ease;
+  font-size: 0.9rem;
+  max-width: 300px;
+  word-wrap: break-word;
+}
+
+.toast-success {
+  background: #22c55e;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(20px); }
+  10% { opacity: 1; transform: translateY(0); }
+  90% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(20px); }
+}
