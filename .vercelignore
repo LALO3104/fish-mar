@@ -2,3 +2,6 @@
 supabase/
 README.md
 .gitignore
+.env
+.env.*
+.vercel/
