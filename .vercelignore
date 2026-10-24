@@ -1,0 +1,4 @@
+# Archivos que NO se publican en la página web
+supabase/
+README.md
+.gitignore
