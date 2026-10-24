@@ -1,7 +1,68 @@
 // js/utils.js
 
+// ======================
+// SEGURIDAD AL MOSTRAR DATOS
+// ======================
+
+// Escapa texto antes de meterlo en innerHTML (evita que un nombre o una
+// nota con <script> o <img onerror=...> se ejecute en el panel).
+function escapeHtml(valor) {
+  if (valor === null || valor === undefined) return "";
+  return String(valor)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Solo permite enlaces http(s); cualquier otra cosa (javascript:, data:...) se vuelve "#"
+function safeUrl(url) {
+  if (!url) return "#";
+  try {
+    const u = new URL(String(url), window.location.href);
+    if (u.protocol === "http:" || u.protocol === "https:") return escapeHtml(u.href);
+  } catch (e) { /* URL inválida */ }
+  return "#";
+}
+
+// ======================
+// FECHAS (siempre en hora de Ciudad de México)
+// ======================
+
+const ZONA_MX = "America/Mexico_City";
+// México no tiene horario de verano desde 2022: el desfase es fijo
+const OFFSET_MX = "-06:00";
+
+// "YYYY-MM-DD" de una fecha vista en hora de México
+function fechaMX(fecha = new Date()) {
+  const d = fecha instanceof Date ? fecha : new Date(fecha);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: ZONA_MX });
+}
+
+// Suma días a un "YYYY-MM-DD" y devuelve otro "YYYY-MM-DD"
+function sumarDias(fechaStr, dias) {
+  const d = new Date(`${fechaStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+// Día de la semana (0 = domingo) de un "YYYY-MM-DD"
+function diaSemana(fechaStr) {
+  return new Date(`${fechaStr}T12:00:00Z`).getUTCDay();
+}
+
+// Límites para consultar un día completo en Supabase: usar .gte(desde) y .lt(hasta)
+function rangoDiaMX(fechaStr) {
+  return {
+    desde: `${fechaStr}T00:00:00${OFFSET_MX}`,
+    hasta: `${sumarDias(fechaStr, 1)}T00:00:00${OFFSET_MX}`
+  };
+}
+
 function getHoy() {
-  return new Date().toISOString().split("T")[0];
+  return fechaMX(new Date());
 }
 
 function getFechaPedido(p) {
@@ -18,13 +79,8 @@ function getFechaPedido(p) {
 
 function getFechaPedidoFiltro(p) {
   if (p.created_at) {
-    const d = new Date(p.created_at);
-    if (!isNaN(d.getTime())) {
-      const year = d.toLocaleString('en-US', { timeZone: 'America/Mexico_City', year: 'numeric' });
-      const month = d.toLocaleString('en-US', { timeZone: 'America/Mexico_City', month: '2-digit' });
-      const day = d.toLocaleString('en-US', { timeZone: 'America/Mexico_City', day: '2-digit' });
-      return `${year}-${month}-${day}`;
-    }
+    const f = fechaMX(p.created_at);
+    if (f) return f;
   }
   if (p.fecha) return p.fecha;
   return "";

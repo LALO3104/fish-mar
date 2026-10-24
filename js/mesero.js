@@ -67,7 +67,7 @@ async function cargarProductosMesero() {
   const subBar = document.getElementById("subcategoriaBarMesero");
   if (subBar) {
     subBar.innerHTML = `<button class="subcat-btn active" data-sub="">Todas</button>` +
-      subcats.map(s => `<button class="subcat-btn" data-sub="${s}">${s}</button>`).join('');
+      subcats.map(s => `<button class="subcat-btn" data-sub="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
     subBar.style.display = "flex";
     document.querySelectorAll("#subcategoriaBarMesero .subcat-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -97,7 +97,7 @@ function renderProductosMesero() {
   }
 
   productosDiv.innerHTML = filtrados.map(p => {
-    const img = p.imagen_url || "https://via.placeholder.com/300x200?text=Sin+imagen";
+    const img = p.imagen_url ? safeUrl(p.imagen_url) : "https://via.placeholder.com/300x200?text=Sin+imagen";
     const tipoVenta = p.tipo_venta === 'granel' ? 'kg' : 'pieza';
     const esGranel = p.tipo_venta === 'granel';
     let inputHtml = '';
@@ -109,9 +109,9 @@ function renderProductosMesero() {
     }
     return `
       <div class="product-card">
-        <img class="product-image" src="${img}" alt="${p.nombre}">
+        <img class="product-image" src="${img}" alt="${escapeHtml(p.nombre)}" loading="lazy">
         <div class="product-body">
-          <div class="product-name">${p.nombre}</div>
+          <div class="product-name">${escapeHtml(p.nombre)}</div>
           <div class="price">$${Number(p.precio).toFixed(2)} / ${tipoVenta}</div>
           ${inputHtml}
           <button class="small-btn" onclick="agregarAlPedidoActual(${p.id})">Agregar</button>
@@ -152,8 +152,8 @@ function renderListaPedidos() {
     return `
       <div class="pedido-resumen ${activo}" onclick="seleccionarPedido(${ped.id})">
         <div>
-          <div class="pedido-mesa">📌 ${ped.mesa || "Sin mesa"}</div>
-          <small>${new Date(ped.created_at).toLocaleTimeString()}</small>
+          <div class="pedido-mesa">📌 ${escapeHtml(ped.mesa || "Sin mesa")}</div>
+          <small>${new Date(ped.created_at).toLocaleTimeString('es-MX', { timeZone: ZONA_MX, hour: '2-digit', minute: '2-digit' })}</small>
         </div>
         <div class="pedido-total">$${total.toFixed(2)}</div>
       </div>
@@ -174,6 +174,26 @@ async function seleccionarPedido(id) {
   mesaActualSpan.innerText = pedido.mesa || "Sin mesa";
   renderCarritoActual();
   renderListaPedidos();
+  // En celular, al elegir un pedido saltar directo a los productos
+  if (esCelular()) {
+    document.getElementById("panelProductosMesero")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function esCelular() {
+  return window.matchMedia("(max-width: 900px)").matches;
+}
+
+function irAlCarritoMesero() {
+  document.getElementById("carritoMesero")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// Mantiene al día la barra fija inferior (solo visible en celular)
+function actualizarBarraMovil(total) {
+  const barraMesa = document.getElementById("barraMesa");
+  const barraTotal = document.getElementById("barraTotal");
+  if (barraMesa) barraMesa.textContent = pedidoSeleccionadoId ? mesaActualSpan.innerText : "Ningún pedido";
+  if (barraTotal) barraTotal.textContent = total.toFixed(2);
 }
 
 async function crearNuevoPedido() {
@@ -240,6 +260,7 @@ function renderCarritoActual() {
   if (carritoActual.length === 0) {
     carritoDiv.innerHTML = '<div class="empty-cart">Sin productos</div>';
     totalSpan.innerText = "0.00";
+    actualizarBarraMovil(0);
     return;
   }
   let total = 0;
@@ -250,8 +271,8 @@ function renderCarritoActual() {
     return `
       <div class="cart-item">
         <div>
-          <strong>${item.nombre}</strong><br>
-          ${item.qty} ${unidad} x $${item.precio.toFixed(2)}
+          <strong>${escapeHtml(item.nombre)}</strong><br>
+          ${Number(item.qty)} ${unidad} x $${Number(item.precio).toFixed(2)}
           <div class="cart-item-price">$${lineTotal.toFixed(2)}</div>
         </div>
         <div class="qty-controls">
@@ -264,6 +285,7 @@ function renderCarritoActual() {
     `;
   }).join("");
   totalSpan.innerText = total.toFixed(2);
+  actualizarBarraMovil(total);
 }
 
 function cambiarCantidad(id, delta) {
@@ -320,14 +342,14 @@ async function imprimirComanda() {
     <div style="width: 80mm; font-family: monospace; padding: 10px;">
       <h2>🍽️ COMANDA</h2>
       <p><strong>Pedido:</strong> #${pedidoSeleccionadoId}</p>
-      <p><strong>Mesa:</strong> ${mesa}</p>
+      <p><strong>Mesa:</strong> ${escapeHtml(mesa)}</p>
       <hr>
       <table style="width:100%">
         <tr><th>Cant</th><th>Producto</th><th>Precio</th></tr>
   `;
   carritoActual.forEach(item => {
     const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pz';
-    comandaHtml += `<tr><td>${item.qty} ${unidad}</td><td>${item.nombre}</td><td>$${item.precio.toFixed(2)}</td></tr>`;
+    comandaHtml += `<tr><td>${escapeHtml(item.qty)} ${unidad}</td><td>${escapeHtml(item.nombre)}</td><td>$${item.precio.toFixed(2)}</td></tr>`;
   });
   comandaHtml += `</table><hr><p>Fecha: ${new Date().toLocaleString()}</p><p>¡Gracias!</p></div>`;
   const ventana = window.open();
@@ -484,14 +506,14 @@ function imprimirTicketCliente(pedidoId, items, subtotal, descuento, comision, t
       <hr>
       <table style="width:100%">
         <tr><th>Cant</th><th>Producto</th><th>Importe</th></tr>
-        ${items.map(i => `<tr><td>${i.qty} ${i.tipo_venta==='granel'?'kg':'pz'}</td><td>${i.nombre}</td><td>$${(i.precio*i.qty).toFixed(2)}</td></tr>`).join('')}
+        ${items.map(i => `<tr><td>${escapeHtml(i.qty)} ${i.tipo_venta==='granel'?'kg':'pz'}</td><td>${escapeHtml(i.nombre)}</td><td>$${(i.precio*i.qty).toFixed(2)}</td></tr>`).join('')}
       </table>
       <hr>
       <p>Subtotal: $${subtotal.toFixed(2)}</p>
       ${descuento > 0 ? `<p>Descuento: -$${descuento.toFixed(2)}</p>` : ''}
       ${comision > 0 ? `<p>Comisión tarjeta (4.5%): +$${comision.toFixed(2)}</p>` : ''}
       <p><strong>Total: $${total.toFixed(2)}</strong></p>
-      <p>Pago: ${metodo}</p>
+      <p>Pago: ${escapeHtml(metodo)}</p>
       <p>¡Vuelva pronto!</p>
     </div>
   `;

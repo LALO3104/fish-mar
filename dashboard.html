@@ -304,6 +304,33 @@
       }
     }
 
+    /* ===== Celular ===== */
+    @media (max-width: 600px) {
+      /* Pestañas en una sola fila deslizable */
+      .tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 14px;
+      }
+      .tab-btn {
+        flex: 0 0 auto;
+        padding: 8px 14px;
+        font-size: 0.9rem;
+      }
+      .toolbar select, .toolbar input, .toolbar button {
+        flex: 1 1 auto;
+        min-height: 42px;
+      }
+      .product-filters {
+        padding: 0;
+      }
+      .period-selector {
+        padding: 12px;
+        gap: 10px;
+      }
+    }
+
     /* Estilos mejorados para impresión de tickets */
     @media print {
       body * {

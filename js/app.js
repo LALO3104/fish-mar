@@ -62,7 +62,7 @@ function renderCartModal() {
     return `
       <div class="cart-item" data-id="${item.id}">
         <div class="cart-item-info">
-          <strong>${item.nombre}</strong>
+          <strong>${escapeHtml(item.nombre)}</strong>
           <small>$${precio.toFixed(2)} / ${unidad}</small>
           <div class="cart-item-price">$${lineTotal.toFixed(2)}</div>
         </div>
@@ -222,7 +222,7 @@ function renderProductos() {
 
   cont.innerHTML = filtrados.map(p => {
     const img = p.imagen_url && p.imagen_url.trim()
-      ? p.imagen_url
+      ? safeUrl(p.imagen_url)
       : "https://via.placeholder.com/300x200?text=Sin+imagen";
 
     const tipoVenta = p.tipo_venta === 'granel' ? 'kg' : 'pieza';
@@ -253,11 +253,11 @@ function renderProductos() {
 
     return `
       <article class="product-card">
-        <img class="product-image" src="${img}" alt="${p.nombre}">
+        <img class="product-image" src="${img}" alt="${escapeHtml(p.nombre)}" loading="lazy">
         <div class="product-body">
-          <div class="product-category">${p.categoria}${p.subcategoria ? ` · ${p.subcategoria}` : ''}</div>
-          <div class="product-name">${p.nombre}</div>
-          <div class="product-desc">${descripcion}</div>
+          <div class="product-category">${escapeHtml(p.categoria)}${p.subcategoria ? ` · ${escapeHtml(p.subcategoria)}` : ''}</div>
+          <div class="product-name">${escapeHtml(p.nombre)}</div>
+          <div class="product-desc">${escapeHtml(descripcion)}</div>
           <div class="product-footer">
             <div class="price">$${Number(p.precio).toFixed(2)} <span class="unit">/ ${tipoVenta}</span></div>
             ${cantidadInputHtml}

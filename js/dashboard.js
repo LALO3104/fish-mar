@@ -132,17 +132,17 @@ function renderProductosAdmin(productos) {
     return;
   }
   cont.innerHTML = productos.map(p => {
-    const img = p.imagen_url && p.imagen_url.trim() ? p.imagen_url : "https://via.placeholder.com/100";
+    const img = p.imagen_url && p.imagen_url.trim() ? safeUrl(p.imagen_url) : "https://via.placeholder.com/100";
     const tipoVenta = p.tipo_venta === 'granel' ? 'kg' : 'pieza';
-    const subcategoriaHtml = p.subcategoria ? `<small class="subcat">${p.subcategoria}</small>` : '';
+    const subcategoriaHtml = p.subcategoria ? `<small class="subcat">${escapeHtml(p.subcategoria)}</small>` : '';
     return `
       <div class="admin-item">
-        <img src="${img}" alt="${p.nombre}">
+        <img src="${img}" alt="${escapeHtml(p.nombre)}">
         <div>
-          <strong>${p.nombre}</strong>
+          <strong>${escapeHtml(p.nombre)}</strong>
           <p>$${Number(p.precio).toFixed(2)} / ${tipoVenta}</p>
-          <small>${p.categoria}</small> ${subcategoriaHtml}
-          <p class="product-desc-small">${p.descripcion || 'Sin descripción'}</p>
+          <small>${escapeHtml(p.categoria)}</small> ${subcategoriaHtml}
+          <p class="product-desc-small">${escapeHtml(p.descripcion || 'Sin descripción')}</p>
           <div class="admin-actions">
             <button class="edit-btn" onclick="editarProducto(event, ${p.id})">Editar</button>
             <button class="delete-btn" onclick="eliminarProducto(event, ${p.id})">Eliminar</button>
@@ -397,25 +397,25 @@ function renderPedidos(lista) {
     const estadoClass = getEstadoClass(p.estado, p.created_at || p.fecha);
     const fechaLocal = formatearFechaPedido(p);
     const tiempo = calcularTiempoPedido(p);
-    const mapa = p.ubicacion ? p.ubicacion : "#";
+    const mapa = safeUrl(p.ubicacion);
     const repartidorAsignadoId = p.repartidor_id || "";
-    const pedidoNumero = p.numero_pedido || `#${p.id}`;
+    const pedidoNumero = escapeHtml(p.numero_pedido || `#${p.id}`);
     const itemsHtml = Array.isArray(p.items) && p.items.length
       ? p.items.map(item => `
-          <li>${item.nombre} x${item.qty} — $${(Number(item.precio) * Number(item.qty)).toFixed(2)}</li>
+          <li>${escapeHtml(item.nombre)} x${escapeHtml(item.qty)} — $${(Number(item.precio) * Number(item.qty)).toFixed(2)}</li>
         `).join("")
       : `<li>Sin detalle de productos</li>`;
     const repartidoresOptions = repartidoresCache.length
       ? repartidoresCache.map(r => `
-          <option value="${r.user_id}" ${r.user_id === repartidorAsignadoId ? "selected" : ""}>
-            ${r.full_name || "Sin nombre"}
+          <option value="${escapeHtml(r.user_id)}" ${r.user_id === repartidorAsignadoId ? "selected" : ""}>
+            ${escapeHtml(r.full_name || "Sin nombre")}
           </option>
         `).join("")
       : `<option value="">No hay repartidores</option>`;
 
     let descuentoHtml = '';
     if (p.descuento_monto && p.descuento_monto > 0) {
-      const tipoTexto = p.descuento_tipo === 'porcentaje' ? `${p.descuento_valor}%` : `$${Number(p.descuento_valor).toFixed(2)}`;
+      const tipoTexto = p.descuento_tipo === 'porcentaje' ? `${Number(p.descuento_valor)}%` : `$${Number(p.descuento_valor).toFixed(2)}`;
       descuentoHtml = `<p>🎁 Descuento: -$${Number(p.descuento_monto).toFixed(2)} (${tipoTexto})</p>`;
     }
 
@@ -423,20 +423,21 @@ function renderPedidos(lista) {
       <div class="pedido-card ${estadoClass}">
         <div class="pedido-top">
           <div>
-            <h3>${p.nombre}</h3>
-            <span class="pedido-phone">📞 ${p.telefono}</span>
+            <h3>${escapeHtml(p.nombre)}</h3>
+            <span class="pedido-phone">📞 ${escapeHtml(p.telefono)}</span>
             <p class="pedido-time">🧾 Pedido: <strong>${pedidoNumero}</strong></p>
-            <p class="pedido-time">🕒 ${fechaLocal}</p>
+            <p class="pedido-time">🕒 ${escapeHtml(fechaLocal)}</p>
             <p class="pedido-time">⏱️ ${tiempo}</p>
           </div>
-          <span class="estado-badge ${estadoClass}">${p.estado}</span>
+          <span class="estado-badge ${estadoClass}">${escapeHtml(p.estado)}</span>
         </div>
         <div class="pedido-body">
-          <p>📍 ${p.direccion}</p>
-          <p>💳 ${p.metodo_pago}</p>
+          <p>📍 ${escapeHtml(p.direccion)}</p>
+          <p>💳 ${escapeHtml(p.metodo_pago)}</p>
           <p>💰 <strong>$${Number(p.total).toFixed(2)}</strong></p>
           ${descuentoHtml}
-          <p>🚚 Repartidor: ${getRepartidorTextoPedido(p)}</p>
+          ${p.notas ? `<p>📝 ${escapeHtml(p.notas)}</p>` : ''}
+          <p>🚚 Repartidor: ${escapeHtml(getRepartidorTextoPedido(p))}</p>
           <div class="pedido-items">
             <strong>Productos:</strong>
             <ul>${itemsHtml}</ul>
@@ -559,7 +560,7 @@ function renderRepartidores(lista) {
 
   cont.innerHTML = entradas.map(([nombre, total]) => `
     <div class="admin-item">
-      <strong>${nombre}</strong>
+      <strong>${escapeHtml(nombre)}</strong>
       <div style="font-size: 1.2rem; font-weight: bold; color: #0ea5a4;">$${total.toFixed(2)}</div>
     </div>
   `).join("");
@@ -651,13 +652,13 @@ function renderizarProductosEditables() {
     return `
       <div class="cart-item editable-item" data-index="${index}">
         <div class="cart-item-info">
-          <strong>${item.nombre}</strong>
+          <strong>${escapeHtml(item.nombre)}</strong>
           <small>$${Number(item.precio).toFixed(2)} / ${unidad}</small>
           <div class="cart-item-price">$${(Number(item.precio) * Number(item.qty)).toFixed(2)}</div>
         </div>
         <div class="qty-controls">
           <button onclick="cambiarCantidadProductoEditable(${index}, -${step})">−</button>
-          <input type="number" value="${item.qty}" step="${step}" min="0.01" onchange="cambiarCantidadProductoEditable(${index}, 0, this.value)">
+          <input type="number" value="${Number(item.qty)}" step="${step}" min="0.01" onchange="cambiarCantidadProductoEditable(${index}, 0, this.value)">
           <button onclick="cambiarCantidadProductoEditable(${index}, ${step})">+</button>
           <button class="remove" onclick="eliminarProductoEditable(${index})">Eliminar</button>
         </div>
@@ -851,10 +852,10 @@ function abrirModalWhatsApp(pedidoId) {
 
   const infoDiv = document.getElementById("whatsappPedidoInfo");
   infoDiv.innerHTML = `
-    <strong>Cliente:</strong> ${pedido.nombre}<br>
-    <strong>Pedido:</strong> ${pedido.numero_pedido || '#' + pedido.id}<br>
+    <strong>Cliente:</strong> ${escapeHtml(pedido.nombre)}<br>
+    <strong>Pedido:</strong> ${escapeHtml(pedido.numero_pedido || '#' + pedido.id)}<br>
     <strong>Total:</strong> $${Number(pedido.total).toFixed(2)}<br>
-    <strong>Estado:</strong> ${pedido.estado}
+    <strong>Estado:</strong> ${escapeHtml(pedido.estado)}
   `;
 
   const numeroRaw = pedido.telefono;
@@ -947,37 +948,40 @@ function aplicarPersonalizado() {
   actualizarMetricasPeriodo();
 }
 
+// Día del pedido en hora de México ("YYYY-MM-DD")
+function getDiaPedidoMetricas(p) {
+  if (p.tipo_pedido === 'local' && p.fecha_cierre) return fechaMX(p.fecha_cierre);
+  if (p.created_at) return fechaMX(p.created_at);
+  return p.fecha || "";
+}
+
 async function actualizarMetricasPeriodo() {
-  let fechaInicio, fechaFin;
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
+  // Fechas como texto "YYYY-MM-DD" en hora de México, rango inclusivo
+  const hoy = getHoy();
+  let fechaInicio, fechaFin = hoy;
 
   switch (periodoActual) {
     case 'hoy':
       fechaInicio = hoy;
-      fechaFin = hoy;
       break;
     case 'semana':
-      const inicioSemana = new Date(hoy);
-      inicioSemana.setDate(hoy.getDate() - hoy.getDay());
-      fechaInicio = inicioSemana;
-      fechaFin = hoy;
+      fechaInicio = sumarDias(hoy, -diaSemana(hoy)); // desde el domingo
       break;
     case 'mes':
-      fechaInicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-      fechaFin = hoy;
+      fechaInicio = hoy.slice(0, 8) + "01";
       break;
     case 'personalizado':
-      fechaInicio = new Date(fechaInicioPersonalizado);
-      fechaFin = new Date(fechaFinPersonalizado);
+      if (!fechaInicioPersonalizado || !fechaFinPersonalizado) return;
+      fechaInicio = fechaInicioPersonalizado;
+      fechaFin = fechaFinPersonalizado;
+      if (fechaInicio > fechaFin) [fechaInicio, fechaFin] = [fechaFin, fechaInicio];
       break;
   }
 
   // Filtrar todos los pedidos (online + local cerrado)
   const pedidosFiltrados = todosPedidosCache.filter(p => {
-    const fechaPedido = getFechaPedidoMetricas(p);
-    if (!fechaPedido) return false;
-    return fechaPedido >= fechaInicio && fechaPedido <= fechaFin;
+    const dia = getDiaPedidoMetricas(p);
+    return dia && dia >= fechaInicio && dia <= fechaFin;
   });
 
   actualizarStatsFiltrados(pedidosFiltrados);
@@ -999,25 +1003,20 @@ function actualizarStatsFiltrados(pedidos) {
 }
 
 function generarDatosIngresosDiarios(pedidos, fechaInicio, fechaFin) {
-  const diffDays = Math.ceil((fechaFin - fechaInicio) / (1000 * 60 * 60 * 24)) + 1;
-  const daysToShow = Math.min(diffDays, 14);
+  // Se muestran como máximo los últimos 31 días del período
   const labels = [];
-  const ingresosPorDia = [];
-
-  for (let i = 0; i < daysToShow; i++) {
-    const fecha = new Date(fechaInicio);
-    fecha.setDate(fechaInicio.getDate() + i);
-    const fechaStr = fecha.toISOString().split('T')[0];
-    labels.push(fechaStr);
-    const totalDia = pedidos
-      .filter(p => {
-        const fechaP = getFechaPedidoMetricas(p);
-        if (!fechaP) return false;
-        return fechaP.toISOString().split('T')[0] === fechaStr;
-      })
-      .reduce((sum, p) => sum + Number(p.total), 0);
-    ingresosPorDia.push(totalDia);
+  let dia = fechaFin;
+  while (dia >= fechaInicio && labels.length < 31) {
+    labels.unshift(dia);
+    dia = sumarDias(dia, -1);
   }
+
+  const totales = {};
+  pedidos.forEach(p => {
+    const d = getDiaPedidoMetricas(p);
+    totales[d] = (totales[d] || 0) + Number(p.total);
+  });
+  const ingresosPorDia = labels.map(d => totales[d] || 0);
 
   const ctx = document.getElementById("graficaIngresosDiarios").getContext("2d");
   if (chartIngresos) chartIngresos.destroy();
@@ -1049,11 +1048,8 @@ function generarVentasPorDiaSemana(pedidos) {
   const ventasPorDia = [0,0,0,0,0,0,0];
 
   pedidos.forEach(p => {
-    const fechaPedido = getFechaPedidoMetricas(p);
-    if (fechaPedido) {
-      const dia = fechaPedido.getDay();
-      ventasPorDia[dia] += Number(p.total);
-    }
+    const d = getDiaPedidoMetricas(p);
+    if (d) ventasPorDia[diaSemana(d)] += Number(p.total);
   });
 
   const ctx = document.getElementById("graficaVentasPorDia").getContext("2d");
@@ -1085,13 +1081,14 @@ function generarVentasPorDiaSemana(pedidos) {
 
 async function cargarVentasLocal() {
   const fecha = document.getElementById("filtroFechaLocal")?.value || getHoy();
+  const rango = rangoDiaMX(fecha);
   const { data, error } = await supabaseClient
     .from("pedidos")
     .select("*")
     .eq("tipo_pedido", "local")
     .eq("estado_local", "cerrado")
-    .gte("fecha_cierre", `${fecha}T00:00:00-06:00`)
-    .lt("fecha_cierre", `${fecha}T23:59:59-06:00`);
+    .gte("fecha_cierre", rango.desde)
+    .lt("fecha_cierre", rango.hasta);
   if (error) {
     handleError(error, "Error cargando ventas locales");
     return;
@@ -1114,13 +1111,13 @@ async function cargarVentasLocal() {
     return `
       <div class="admin-item" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div style="flex: 2; min-width: 150px;">
-          <strong style="font-size: 1.1rem;">🍽️ ${p.mesa || "Mesa sin número"}</strong>
+          <strong style="font-size: 1.1rem;">🍽️ ${escapeHtml(p.mesa || "Mesa sin número")}</strong>
           <br><small>📅 ${fechaCierre}</small>
-          <br><small>👨‍🍳 Mesero: ${p.mesero_id ? (p.mesero_nombre || p.mesero_id.slice(0,8)) : "N/A"}</small>
+          <br><small>👨‍🍳 Mesero: ${escapeHtml(p.mesero_id ? (p.mesero_nombre || p.mesero_id.slice(0,8)) : "N/A")}</small>
         </div>
         <div style="flex: 1; text-align: center;">
           <span style="font-size: 1.2rem; font-weight: bold; color: #0ea5a4;">$${Number(p.total).toFixed(2)}</span>
-          <br><span class="badge" style="background: #e2e8f0; padding: 2px 8px; border-radius: 20px;">${p.metodo_pago_local || "N/A"}</span>
+          <br><span class="badge" style="background: #e2e8f0; padding: 2px 8px; border-radius: 20px;">${escapeHtml(p.metodo_pago_local || "N/A")}</span>
         </div>
         <div style="display: flex; gap: 8px;">
           <button class="small-btn" onclick="verDetallePedidoLocalModal(${p.id})" style="background: #0ea5a4; color: white;">👁️ Ver items</button>
@@ -1146,8 +1143,8 @@ function verDetallePedidoLocalModal(pedidoId) {
     const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pz';
     return `
       <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${item.nombre}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">${item.qty} ${unidad}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(item.nombre)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">${escapeHtml(item.qty)} ${unidad}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">$${Number(item.precio).toFixed(2)}</td>
         <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">$${lineTotal.toFixed(2)}</td>
       </tr>
@@ -1159,9 +1156,9 @@ function verDetallePedidoLocalModal(pedidoId) {
   
   const modalContent = `
     <div style="padding: 8px;">
-      <p><strong>🍽️ Mesa:</strong> ${pedido.mesa || "Sin mesa"}</p>
-      <p><strong>📅 Fecha cierre:</strong> ${new Date(pedido.fecha_cierre).toLocaleString()}</p>
-      <p><strong>💳 Método de pago:</strong> ${pedido.metodo_pago_local || "No especificado"}</p>
+      <p><strong>🍽️ Mesa:</strong> ${escapeHtml(pedido.mesa || "Sin mesa")}</p>
+      <p><strong>📅 Fecha cierre:</strong> ${new Date(pedido.fecha_cierre).toLocaleString('es-MX', { timeZone: ZONA_MX, hour12: true })}</p>
+      <p><strong>💳 Método de pago:</strong> ${escapeHtml(pedido.metodo_pago_local || "No especificado")}</p>
       <hr>
       <table style="width: 100%; border-collapse: collapse;">
         <thead>
@@ -1259,12 +1256,12 @@ function renderListaUsuarios() {
   cont.innerHTML = listaUsuarios.map(user => `
     <div class="admin-item">
       <div>
-        <strong>${user.full_name || "Sin nombre"}</strong>
-        <p>${user.user_id}</p>
-        <p>Rol: ${user.role} ${user.is_superadmin ? " (Super Admin)" : ""}</p>
+        <strong>${escapeHtml(user.full_name || "Sin nombre")}</strong>
+        <p>${escapeHtml(user.user_id)}</p>
+        <p>Rol: ${escapeHtml(user.role)} ${user.is_superadmin ? " (Super Admin)" : ""}</p>
       </div>
       <div class="admin-actions">
-        <button class="delete-btn" onclick="eliminarUsuario('${user.user_id}')">Eliminar</button>
+        <button class="delete-btn" onclick="eliminarUsuario('${escapeHtml(user.user_id)}')">Eliminar</button>
       </div>
     </div>
   `).join("");
@@ -1395,11 +1392,11 @@ function imprimirPedido(pedidoId) {
   const productosRows = (pedido.items || []).map(item => {
     const cantidad = item.qty;
     const unidad = item.tipo_venta === 'granel' ? 'KG' : 'PZ';
-    const descripcion = `${item.nombre} (${unidad})`;
+    const descripcion = `${escapeHtml(item.nombre)} (${unidad})`;
     const importe = (Number(item.precio) * cantidad).toFixed(2);
     return `
       <tr>
-        <td class="cantidad">${cantidad}</td>
+        <td class="cantidad">${escapeHtml(cantidad)}</td>
         <td class="descripcion">${descripcion}</td>
         <td class="importe">$${importe}</td>
       </tr>
@@ -1417,14 +1414,14 @@ function imprimirPedido(pedidoId) {
       </div>
 
       <div class="pedido-info">
-        PEDIDO: ${pedido.numero_pedido || '#' + pedido.id}<br>
-        FECHA: ${formatearFechaPedido(pedido)}
+        PEDIDO: ${escapeHtml(pedido.numero_pedido || '#' + pedido.id)}<br>
+        FECHA: ${escapeHtml(formatearFechaPedido(pedido))}
       </div>
 
       <div class="cliente-info">
-        <strong>CLIENTE:</strong> ${pedido.nombre}<br>
-        <strong>TELÉFONO:</strong> ${pedido.telefono}<br>
-        <strong>DIRECCIÓN:</strong> ${pedido.direccion}<br>
+        <strong>CLIENTE:</strong> ${escapeHtml(pedido.nombre)}<br>
+        <strong>TELÉFONO:</strong> ${escapeHtml(pedido.telefono)}<br>
+        <strong>DIRECCIÓN:</strong> ${escapeHtml(pedido.direccion)}<br>
         <strong>PAGO:</strong> ${metodoPago}
       </div>
 
@@ -1458,10 +1455,10 @@ function imprimirPedido(pedidoId) {
         </div>
       </div>
 
-      ${pedido.notas ? `<div style="margin: 6px 0; font-style: italic;">NOTAS: ${pedido.notas}</div>` : ''}
+      ${pedido.notas ? `<div style="margin: 6px 0; font-style: italic;">NOTAS: ${escapeHtml(pedido.notas)}</div>` : ''}
 
       <div class="barcode">
-        ${pedido.numero_pedido || '#' + pedido.id}
+        ${escapeHtml(pedido.numero_pedido || '#' + pedido.id)}
       </div>
 
       <div class="gracias">
@@ -1478,7 +1475,7 @@ function imprimirPedido(pedidoId) {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>Ticket Pedido ${pedido.numero_pedido || pedido.id}</title>
+      <title>Ticket Pedido ${escapeHtml(pedido.numero_pedido || pedido.id)}</title>
       <style>
         body {
           margin: 0;

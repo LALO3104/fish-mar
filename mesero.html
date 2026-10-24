@@ -73,6 +73,91 @@
       max-height: 450px;
       overflow-y: auto;
     }
+    .mesero-grid {
+      grid-template-columns: 1fr 1.5fr;
+    }
+    .barra-pedido-movil {
+      display: none;
+    }
+
+    /* ===== Celular ===== */
+    @media (max-width: 900px) {
+      .mesero-grid {
+        grid-template-columns: 1fr;
+      }
+      /* Sin scroll anidado: en el celular se desplaza toda la página */
+      .products-grid {
+        max-height: none;
+        overflow: visible;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .products-grid .product-image {
+        height: 90px;
+      }
+      .products-grid .product-body {
+        padding: 10px;
+        gap: 6px;
+      }
+      .products-grid .product-name {
+        font-size: 0.9rem;
+      }
+      .products-grid .price {
+        font-size: 0.9rem;
+      }
+      .products-grid .small-btn {
+        width: 100%;
+        min-height: 40px;
+      }
+      .subcategory-bar {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+      }
+      .subcategory-bar .subcat-btn {
+        flex: 0 0 auto;
+      }
+      .acciones-pedido > button {
+        flex: 1 1 calc(50% - 8px);
+        min-height: 44px;
+        margin-top: 0;
+      }
+      /* Deja espacio para la barra fija de abajo */
+      main.container {
+        padding-bottom: 90px;
+      }
+      .barra-pedido-movil {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+        background: #0c2b36;
+        color: #fff;
+        box-shadow: 0 -6px 16px rgba(0,0,0,0.15);
+      }
+      .barra-pedido-movil .barra-info {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .barra-pedido-movil button {
+        flex-shrink: 0;
+        border: 0;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-weight: 700;
+        background: #0ea5a4;
+        color: #fff;
+      }
+    }
   </style>
 </head>
 <body>
@@ -87,7 +172,7 @@
 </header>
 
 <main class="container">
-  <div class="dashboard-grid" style="grid-template-columns: 1fr 1.5fr;">
+  <div class="dashboard-grid mesero-grid">
     <!-- Panel izquierdo: Lista de pedidos activos -->
     <div class="panel">
       <div class="panel-header">
@@ -100,7 +185,7 @@
     </div>
 
     <!-- Panel derecho: Carrito y productos -->
-    <div class="panel">
+    <div class="panel" id="panelProductosMesero">
       <div id="pedidoSeleccionadoInfo" style="margin-bottom: 12px;">
         <strong>Pedido actual:</strong> <span id="mesaActual">Ninguno</span>
         <span id="estadoActualBadge" class="badge-abierto" style="margin-left: 8px;">abierto</span>
@@ -116,7 +201,7 @@
       <div id="productosMesero" class="products-grid"></div>
 
       <!-- Carrito del pedido seleccionado -->
-      <div class="cart-card" style="margin-top: 20px;">
+      <div class="cart-card" id="carritoMesero" style="margin-top: 20px;">
         <h3>🛒 Pedido actual</h3>
         <div id="carritoActual" class="cart-list"></div>
         <div class="cart-summary">
@@ -135,6 +220,12 @@
     </div>
   </div>
 </main>
+
+<!-- Barra fija en celular: pedido actual y total, con acceso rápido al carrito -->
+<div class="barra-pedido-movil">
+  <div class="barra-info">📌 <strong id="barraMesa">Ningún pedido</strong> · $<strong id="barraTotal">0.00</strong></div>
+  <button onclick="irAlCarritoMesero()">🛒 Ver pedido</button>
+</div>
 
 <!-- Modal para cerrar pedido con descuento -->
 <div id="modalCerrarPedido" class="cart-modal" style="display: none;">

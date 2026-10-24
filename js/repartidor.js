@@ -59,8 +59,8 @@ async function cargarPedidosRepartidor() {
     .order("created_at", { ascending: false });
 
   if (fechaFiltro) {
-    query = query.gte("created_at", `${fechaFiltro}T00:00:00-06:00`)
-                 .lt("created_at", `${fechaFiltro}T23:59:59-06:00`);
+    const rango = rangoDiaMX(fechaFiltro);
+    query = query.gte("created_at", rango.desde).lt("created_at", rango.hasta);
   }
 
   const { data, error } = await query;
@@ -89,12 +89,12 @@ function renderPedidosRepartidor() {
     const estadoClass = getEstadoClass(p.estado, p.created_at || p.fecha);
     const fechaLocal = formatearFechaPedido(p);
     const tiempo = calcularTiempoPedido(p);
-    const mapa = p.ubicacion ? p.ubicacion : "#";
-    const pedidoNumero = p.numero_pedido || `#${p.id}`;
+    const mapa = safeUrl(p.ubicacion);
+    const pedidoNumero = escapeHtml(p.numero_pedido || `#${p.id}`);
 
     const itemsHtml = Array.isArray(p.items) && p.items.length
       ? p.items.map(item => `
-          <li>${item.nombre} x${item.qty} — $${(Number(item.precio) * Number(item.qty)).toFixed(2)}</li>
+          <li>${escapeHtml(item.nombre)} x${escapeHtml(item.qty)} — $${(Number(item.precio) * Number(item.qty)).toFixed(2)}</li>
         `).join("")
       : `<li>Sin detalle de productos</li>`;
 
@@ -102,19 +102,19 @@ function renderPedidosRepartidor() {
       <div class="pedido-card ${estadoClass}">
         <div class="pedido-top">
           <div>
-            <h3>${p.nombre}</h3>
-            <span class="pedido-phone">📞 ${p.telefono}</span>
+            <h3>${escapeHtml(p.nombre)}</h3>
+            <a class="pedido-phone" href="tel:${escapeHtml(p.telefono)}">📞 ${escapeHtml(p.telefono)}</a>
             <p class="pedido-time">🧾 Pedido: <strong>${pedidoNumero}</strong></p>
-            <p class="pedido-time">🕒 ${fechaLocal}</p>
+            <p class="pedido-time">🕒 ${escapeHtml(fechaLocal)}</p>
             <p class="pedido-time">⏱️ ${tiempo}</p>
           </div>
-          <span class="estado-badge ${estadoClass}">${p.estado}</span>
+          <span class="estado-badge ${estadoClass}">${escapeHtml(p.estado)}</span>
         </div>
         <div class="pedido-body">
-          <p>📍 ${p.direccion}</p>
-          <p>💳 ${p.metodo_pago}</p>
+          <p>📍 ${escapeHtml(p.direccion)}</p>
+          <p>💳 ${escapeHtml(p.metodo_pago)}</p>
           <p>💰 <strong>$${Number(p.total).toFixed(2)}</strong></p>
-          <p>📝 ${p.notas || "Sin notas"}</p>
+          <p>📝 ${escapeHtml(p.notas || "Sin notas")}</p>
           <div class="pedido-items">
             <strong>Productos:</strong>
             <ul>${itemsHtml}</ul>
@@ -176,8 +176,8 @@ async function obtenerTotalesRecaudacionPorFecha() {
       .eq("repartidor_id", userIdActual);
 
     if (fechaFiltro) {
-      query = query.gte("fecha_corte", `${fechaFiltro}T00:00:00-06:00`)
-                   .lt("fecha_corte", `${fechaFiltro}T23:59:59-06:00`);
+      const rango = rangoDiaMX(fechaFiltro);
+      query = query.gte("fecha_corte", rango.desde).lt("fecha_corte", rango.hasta);
     }
 
     const { data: cortes, error } = await query;
@@ -286,10 +286,10 @@ async function cargarHistorialEntregas() {
   const fechaFin = document.getElementById("historialFechaFin")?.value;
 
   if (fechaInicio) {
-    query = query.gte("fecha_corte", `${fechaInicio}T00:00:00-06:00`);
+    query = query.gte("fecha_corte", rangoDiaMX(fechaInicio).desde);
   }
   if (fechaFin) {
-    query = query.lte("fecha_corte", `${fechaFin}T23:59:59-06:00`);
+    query = query.lt("fecha_corte", rangoDiaMX(fechaFin).hasta);
   }
 
   const { data, error } = await query;
@@ -316,7 +316,7 @@ async function cargarHistorialEntregas() {
         <div>
           <strong>💰 $${Number(corte.monto).toFixed(2)}</strong>
           <p>📅 ${fecha}</p>
-          ${corte.notas ? `<p><small>📝 ${corte.notas}</small></p>` : ''}
+          ${corte.notas ? `<p><small>📝 ${escapeHtml(corte.notas)}</small></p>` : ''}
         </div>
         <div class="admin-actions">
           <button class="delete-btn" onclick="eliminarRegistroEntrega(${corte.id})">🗑️ Eliminar</button>

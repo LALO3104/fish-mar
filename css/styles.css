@@ -455,6 +455,10 @@ body {
   grid-template-columns: 2fr 1fr;
   gap: 16px;
 }
+/* Permite que los paneles se encojan al ancho de la pantalla */
+.dashboard-grid > * {
+  min-width: 0;
+}
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -1353,4 +1357,118 @@ body {
   10% { opacity: 1; transform: translateY(0); }
   90% { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(20px); }
+}
+
+/* =====================================================
+   CELULAR (meseros y repartidores lo usan en el teléfono)
+   ===================================================== */
+@media (max-width: 600px) {
+  .container {
+    padding: 12px;
+  }
+  .header {
+    padding: 0.8rem 1rem;
+  }
+  .header-inner {
+    flex-direction: row;
+    text-align: left;
+    gap: 0.5rem;
+  }
+  .logo-area h1 {
+    font-size: 1.2rem;
+    justify-content: flex-start;
+  }
+  .ghost-btn {
+    margin-top: 0;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.8rem;
+  }
+
+  /* 16px evita que el iPhone haga zoom al tocar un campo */
+  input, select, textarea {
+    font-size: 16px;
+  }
+
+  /* Tarjetas de números compactas, en fila */
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px;
+  }
+  .stat-card {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+  .stat-card h4 {
+    font-size: 0.75rem;
+  }
+  .stat-card p {
+    font-size: 1.3rem;
+  }
+
+  .panel, .cart-card {
+    padding: 14px;
+  }
+
+  /* Tarjetas de pedido */
+  .pedido-top {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .pedido-top h3 {
+    margin: 0 0 4px;
+  }
+  .pedido-actions > * {
+    flex: 1 1 calc(50% - 8px);
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .pedido-actions select {
+    flex-basis: 100%;
+  }
+
+  /* Botones de cantidad más fáciles de tocar */
+  .qty-controls button {
+    width: 42px;
+    height: 42px;
+  }
+  .qty-controls .remove {
+    width: auto;
+  }
+  .cart-item {
+    grid-template-columns: 1fr;
+  }
+  .qty-controls {
+    justify-content: flex-start;
+  }
+
+  /* Ventanas emergentes a pantalla completa */
+  .cart-modal-content {
+    width: 100%;
+    margin: 0;
+    height: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .cart-modal-footer {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  /* Avisos a lo ancho, sin tapar botones */
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: none;
+    text-align: center;
+  }
+  .alerta-pedido {
+    left: 12px;
+    right: 12px;
+    top: 12px;
+    text-align: center;
+  }
 }
