@@ -216,6 +216,7 @@ function renderPedidos(lista) {
             <div class="order-name">${escapeHtml(p.nombre)}</div>
             <div class="order-meta">Pedido ${numero} · ${escapeHtml(fechaHoraCortaMX(p.created_at))}</div>
             ${p.estado !== "Entregado" ? `<div class="order-wait"><i class="fa-regular fa-clock"></i> ${escapeHtml(calcularTiempoPedido(p))}</div>` : ""}
+            ${llegoFueraDeHorario(p) ? `<div class="mt-8"><span class="badge off-hours no-dot"><i class="fa-solid fa-moon"></i> Llegó fuera de horario</span></div>` : ""}
           </div>
           <span class="badge ${info.clase}">${info.etiqueta}</span>
         </div>

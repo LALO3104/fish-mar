@@ -48,11 +48,34 @@ function cerrarHoja(id) {
 // ======================
 // CARRITO
 // ======================
+function faltaParaMinimo() {
+  return Math.max(NEGOCIO.pedidoMinimo - totalCarrito(), 0);
+}
+
 function updateCartBadge() {
   const piezas = carrito.reduce((acc, item) => acc + (item.tipo_venta === "granel" ? 1 : Number(item.qty)), 0);
+  const falta = faltaParaMinimo();
   $("cartCountBadge").textContent = piezas;
   $("cartBarTotal").textContent = formatoDinero(roundUpToHalf(totalCarrito()));
+  $("cartBarHint").textContent = falta > 0
+    ? `Te faltan ${formatoDinero(falta)} para el mínimo de $${NEGOCIO.pedidoMinimo}`
+    : "Revisa y envíalo por WhatsApp";
   $("cartBar").hidden = carrito.length === 0;
+  actualizarBotonEnviar();
+}
+
+// El botón de enviar explica qué falta en lugar de solo no funcionar
+function actualizarBotonEnviar() {
+  const btn = $("modalEnviarPedido");
+  if (btn.dataset.enviando) return;
+  const falta = faltaParaMinimo();
+  if (carrito.length && falta > 0) {
+    btn.disabled = true;
+    btn.innerHTML = `Pedido mínimo $${NEGOCIO.pedidoMinimo} · te faltan ${formatoDinero(falta)}`;
+  } else {
+    btn.disabled = carrito.length === 0;
+    btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Enviar pedido';
+  }
 }
 
 function renderCartModal() {
@@ -60,6 +83,12 @@ function renderCartModal() {
   const subtotal = roundUpToHalf(totalCarrito());
   $("modalSubtotal").textContent = subtotal.toFixed(2);
   $("modalTotal").textContent = subtotal.toFixed(2);
+
+  const falta = faltaParaMinimo();
+  $("avisoMinimo").hidden = !carrito.length || falta <= 0;
+  $("avisoMinimoTexto").textContent = `Agrega ${formatoDinero(falta)} más para llegar al pedido mínimo`;
+  $("avisoMinimoBarra").style.width = `${Math.min(100, (totalCarrito() / NEGOCIO.pedidoMinimo) * 100)}%`;
+  $("avisoHorarioCarrito").hidden = estaAbierto();
 
   if (carrito.length === 0) {
     body.innerHTML = `
@@ -302,10 +331,21 @@ function updateSubcategoryMessage() {
 // UBICACIÓN
 // ======================
 function marcarUbicacion(lat, lng, texto) {
-  ubicacionActual = `https://www.google.com/maps?q=${lat},${lng}`;
   const el = $("ubicacion");
-  el.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${escapeHtml(texto)}`;
+  const km = distanciaATiendaKm(lat, lng);
+  el.classList.remove("ok", "error");
+
+  if (km > NEGOCIO.radioKm) {
+    ubicacionActual = "";
+    el.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Esa ubicación está a ${km.toFixed(1)} km. ` +
+      `Solo entregamos a ${NEGOCIO.radioKm} km de Fish-Mar. Si es un error, márcala en el mapa.`;
+    el.classList.add("error");
+    return false;
+  }
+  ubicacionActual = `https://www.google.com/maps?q=${lat},${lng}`;
+  el.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${escapeHtml(texto)} · a ${km.toFixed(1)} km de la tienda`;
   el.classList.add("ok");
+  return true;
 }
 
 function obtenerUbicacion() {
@@ -337,10 +377,20 @@ function abrirMapModal() {
   document.body.classList.add("no-scroll");
 
   if (!mapInstance) {
-    mapInstance = L.map("map").setView([19.319, -98.882], 14);   // Ixtapaluca
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CARTO'
+    const tienda = [NEGOCIO.tienda.lat, NEGOCIO.tienda.lng];
+    mapInstance = L.map("map").setView(tienda, 13);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(mapInstance);
+    // Zona de entrega y ubicación de la tienda
+    L.circle(tienda, {
+      radius: NEGOCIO.radioKm * 1000,
+      color: "#0b7a75", weight: 2, fillColor: "#0b7a75", fillOpacity: .08
+    }).addTo(mapInstance);
+    L.marker(tienda, {
+      icon: L.divIcon({ className: "store-pin", html: "🐟", iconSize: [36, 36], iconAnchor: [18, 18] })
+    }).addTo(mapInstance).bindTooltip("Fish-Mar");
     mapInstance.on("click", (e) => ponerMarcador(e.latlng));
   }
   setTimeout(() => mapInstance.invalidateSize(), 150);
@@ -383,7 +433,14 @@ function confirmarUbicacionMapa() {
     showToast("Toca el mapa para marcar dónde está tu casa.");
     return;
   }
-  marcarUbicacion(ubicacionSeleccionadaLatLng.lat, ubicacionSeleccionadaLatLng.lng, "Ubicación marcada en el mapa");
+  const lat = ubicacionSeleccionadaLatLng.lat;
+  const lng = ubicacionSeleccionadaLatLng.lng;
+  const km = distanciaATiendaKm(lat, lng);
+  if (km > NEGOCIO.radioKm) {
+    showToast(`Ese punto está a ${km.toFixed(1)} km. Solo entregamos dentro del círculo (${NEGOCIO.radioKm} km).`);
+    return;
+  }
+  marcarUbicacion(lat, lng, "Ubicación marcada en el mapa");
   cerrarMapModal();
 }
 
@@ -417,7 +474,14 @@ function validateModalForm() {
   const errores = [];
 
   if (!carrito.length) errores.push(["", "Tu pedido está vacío."]);
-  if (!ubicacionActual) errores.push(["ubicacion", "Marca tu ubicación con \"Mi ubicación\" o \"Elegir en mapa\"."]);
+  else if (faltaParaMinimo() > 0) {
+    errores.push(["", `El pedido mínimo es de $${NEGOCIO.pedidoMinimo}. Te faltan ${formatoDinero(faltaParaMinimo())}.`]);
+  }
+  if (!ubicacionActual) {
+    errores.push(["ubicacion", $("ubicacion").classList.contains("error")
+      ? `Tu ubicación está fuera de la zona de entrega (${NEGOCIO.radioKm} km).`
+      : "Marca tu ubicación con \"Mi ubicación\" o \"Elegir en mapa\"."]);
+  }
   if ($("modalDireccionCliente").value.trim().length < 8) {
     errores.push(["modalDireccionCliente", "Escribe tu dirección completa (calle, número y colonia)."]);
   }
@@ -446,8 +510,10 @@ async function enviarPedidoDesdeModal() {
   const notas = $("modalNotasPedido").value.trim();
 
   const btn = $("modalEnviarPedido");
+  btn.dataset.enviando = "1";
   btn.disabled = true;
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando…';
+  const abierto = estaAbierto();
 
   try {
     // El número de pedido, los precios y el total los calcula la base de datos
@@ -482,6 +548,7 @@ async function enviarPedidoDesdeModal() {
     mensaje += `🚚 *Envío:* GRATIS\n`;
     mensaje += `💰 *Total redondeado:* $${Number(pedido.total).toFixed(2)}\n`;
     if (notas) mensaje += `📝 *Notas:* ${notas}\n`;
+    if (!abierto) mensaje += `\n🌙 *Pedido hecho fuera de horario*\n`;
     mensaje += `\n📍 *Ubicación:* ${ubicacionActual}`;
 
     const url = `https://wa.me/52${NUMERO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
@@ -494,16 +561,19 @@ async function enviarPedidoDesdeModal() {
     document.querySelectorAll('input[name="metodoPago"]').forEach(r => { r.checked = false; });
     ubicacionActual = "";
     $("ubicacion").textContent = "Todavía no marcas tu ubicación.";
-    $("ubicacion").classList.remove("ok");
+    $("ubicacion").classList.remove("ok", "error");
     clearModalErrors();
 
     closeCartModal();
     $("exitoNumero").textContent = pedido.numero_pedido;
+    $("exitoTexto").textContent = abierto
+      ? "Si no se abrió WhatsApp, toca el botón para enviarnos tu pedido y confirmarlo."
+      : "Ahora estamos cerrados: atenderemos tu pedido en cuanto abramos (10:00 a.m.). Envíanos el mensaje por WhatsApp para confirmarlo.";
     $("exitoWhatsApp").href = url;
     abrirHoja("modalExito");
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Enviar pedido';
+    delete btn.dataset.enviando;
+    actualizarBotonEnviar();
   }
 }
 
@@ -563,5 +633,6 @@ document.querySelector(".carousel-control.next")?.addEventListener("click", () =
 // ======================
 // INICIO
 // ======================
+$("avisoHorario").hidden = estaAbierto();
 cargarProductos();
 renderCarrito();

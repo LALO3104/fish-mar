@@ -181,3 +181,42 @@ function fechaHoraCortaMX(fecha) {
 function formatoDinero(n) {
   return "$" + Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+// ======================
+// REGLAS DEL NEGOCIO
+// (si cambian, actualizar también la función crear_pedido_domicilio en Supabase)
+// ======================
+const NEGOCIO = {
+  tienda: { lat: 19.2992749, lng: -98.9061094 },   // Fish-Mar en Google Maps
+  radioKm: 5,            // distancia máxima de entrega
+  pedidoMinimo: 140,     // en productos, sin envío
+  horaApertura: 10,      // 10:00 a.m.
+  horaCierre: 19         // 7:00 p.m.
+};
+
+// Distancia en km entre dos puntos (fórmula de Haversine)
+function distanciaKm(lat1, lng1, lat2, lng2) {
+  const rad = (g) => g * Math.PI / 180;
+  const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 +
+    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(a));
+}
+
+function distanciaATiendaKm(lat, lng) {
+  return distanciaKm(NEGOCIO.tienda.lat, NEGOCIO.tienda.lng, lat, lng);
+}
+
+// Hora (0-23) de una fecha vista en México
+function horaDelDiaMX(fecha = new Date()) {
+  return Number(new Date(fecha).toLocaleString("en-US", { timeZone: ZONA_MX, hour: "numeric", hour12: false })) % 24;
+}
+
+function estaAbierto(fecha = new Date()) {
+  const h = horaDelDiaMX(fecha);
+  return h >= NEGOCIO.horaApertura && h < NEGOCIO.horaCierre;
+}
+
+// ¿El pedido llegó con el local cerrado?
+function llegoFueraDeHorario(p) {
+  return p && p.tipo_pedido !== "local" && p.created_at ? !estaAbierto(p.created_at) : false;
+}

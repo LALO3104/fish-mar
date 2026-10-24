@@ -46,13 +46,19 @@
         <div class="slide-content">
           <span class="promo-badge">Promoción</span>
           <h3>Envío sin costo</h3>
-          <p>En pedidos desde $140</p>
+          <p>A 5 km a la redonda · pedido mínimo $140</p>
         </div>
       </div>
     </div>
     <button class="carousel-control prev" aria-label="Anterior"><i class="fa-solid fa-chevron-left"></i></button>
     <button class="carousel-control next" aria-label="Siguiente"><i class="fa-solid fa-chevron-right"></i></button>
     <div class="carousel-dots"></div>
+  </div>
+
+  <!-- Aviso cuando el local está cerrado -->
+  <div id="avisoHorario" class="note note-closed" hidden>
+    <i class="fa-solid fa-moon"></i>
+    <span><strong>Ahora estamos cerrados.</strong> Puedes hacer tu pedido y lo atenderemos en cuanto abramos (10:00 a.m.).</span>
   </div>
 
   <!-- Cómo funciona -->
@@ -63,8 +69,9 @@
   </section>
 
   <div class="pills">
-    <span class="pill"><i class="fa-solid fa-truck-fast"></i> Envío gratis desde $140</span>
-    <span class="pill"><i class="fa-regular fa-clock"></i> 10:00 a.m. – 7:00 p.m.</span>
+    <span class="pill"><i class="fa-solid fa-truck-fast"></i> Envío gratis · mínimo $140</span>
+    <span class="pill"><i class="fa-solid fa-location-dot"></i> Entregamos a 5 km</span>
+    <span class="pill"><i class="fa-regular fa-clock"></i> Todos los días 10 a.m. – 7 p.m.</span>
   </div>
 
   <!-- Catálogo -->
@@ -116,7 +123,7 @@
   <div class="bottom-bar-inner">
     <button class="bar-btn" id="cartFloatingBtn">
       <span class="bar-count" id="cartCountBadge">0</span>
-      <span class="bar-label">Ver mi pedido<small>Revisa y envíalo por WhatsApp</small></span>
+      <span class="bar-label">Ver mi pedido<small id="cartBarHint">Revisa y envíalo por WhatsApp</small></span>
       <span class="bar-total" id="cartBarTotal">$0.00</span>
     </button>
   </div>
@@ -130,6 +137,10 @@
       <button class="sheet-close" id="closeCartBtn" aria-label="Cerrar">&times;</button>
     </div>
     <div class="sheet-body">
+      <div id="avisoMinimo" class="min-progress" hidden>
+        <div class="row-between small"><span id="avisoMinimoTexto"></span><strong>$140</strong></div>
+        <div class="bar"><span id="avisoMinimoBarra"></span></div>
+      </div>
       <div id="cartModalBody" class="list"></div>
 
       <div class="step-title"><span>1</span> ¿A dónde lo llevamos?</div>
@@ -186,6 +197,9 @@
       </div>
     </div>
     <div class="sheet-footer">
+      <div id="avisoHorarioCarrito" class="small muted" hidden>
+        <i class="fa-solid fa-moon"></i> Estamos cerrados: tu pedido se atenderá al abrir (10:00 a.m.).
+      </div>
       <span id="modalSubtotal" hidden></span>
       <div class="big-total">
         <span class="muted strong">Total <small class="free-ship"><i class="fa-solid fa-truck-fast"></i> envío gratis</small></span>
@@ -209,6 +223,7 @@
       <input type="search" id="searchAddress" class="input" placeholder="Busca tu calle o colonia" />
       <button class="btn btn-primary" onclick="buscarDireccion()"><i class="fa-solid fa-magnifying-glass"></i></button>
     </div>
+    <p class="map-hint"><span class="dot-zone"></span> Zona de entrega: 5 km alrededor de Fish-Mar</p>
     <div id="map"></div>
     <div class="map-modal-footer">
       <button class="btn btn-primary btn-lg btn-block" onclick="confirmarUbicacionMapa()">
@@ -226,7 +241,7 @@
       <h3 style="font-size:1.4rem;font-weight:800;">¡Recibimos tu pedido!</h3>
       <p class="muted">Tu número de pedido es</p>
       <p class="order-number" id="exitoNumero">—</p>
-      <p class="muted">Si no se abrió WhatsApp, toca el botón para enviarnos tu pedido y confirmarlo.</p>
+      <p class="muted" id="exitoTexto">Si no se abrió WhatsApp, toca el botón para enviarnos tu pedido y confirmarlo.</p>
     </div>
     <div class="sheet-footer">
       <a class="btn btn-whatsapp btn-lg btn-block" id="exitoWhatsApp" href="#" target="_blank" rel="noopener">

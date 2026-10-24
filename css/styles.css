@@ -1375,3 +1375,24 @@ body.admin .admin-page { padding-bottom: calc(96px + env(safe-area-inset-bottom)
   .orders-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts { grid-template-columns: 1fr 1fr; }
 }
+
+/* Reglas del negocio (mínimo, horario, zona) */
+.note-closed { background: var(--navy); color: #fff; }
+.note-closed i { color: #ffd479; }
+.min-progress {
+  background: var(--warn-soft);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--warn);
+  font-weight: 700;
+}
+.min-progress .bar { height: 8px; border-radius: 8px; background: rgba(168, 100, 10, .18); overflow: hidden; }
+.min-progress .bar span { display: block; height: 100%; background: var(--warn); border-radius: 8px; transition: width .3s ease; }
+.location-status.error { background: var(--danger-soft); color: var(--danger); font-weight: 700; }
+.map-hint { margin: 0; padding: 8px 16px; background: var(--surface); font-size: .85rem; color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
+.dot-zone { width: 14px; height: 14px; border-radius: 50%; background: rgba(11, 122, 117, .25); border: 2px solid var(--brand); }
+.badge.off-hours { background: var(--navy); color: #fff; }
+.store-pin { font-size: 22px; display: grid; place-items: center; background: #fff; border-radius: 50%; box-shadow: var(--shadow); border: 2px solid var(--brand); }
