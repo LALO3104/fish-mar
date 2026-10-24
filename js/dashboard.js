@@ -622,7 +622,9 @@ function filtrarProductos() {
   const filtrados = productosCache.filter(p =>
     p.nombre.toLowerCase().includes(busq) &&
     (categoriaProductoFilter === "all" || p.categoria === categoriaProductoFilter));
-  $("resumenProductos").textContent = `${filtrados.length} de ${productosCache.length} productos`;
+  const agotados = productosCache.filter(p => p.disponible === false).length;
+  $("resumenProductos").textContent = `${filtrados.length} de ${productosCache.length} productos` +
+    (agotados ? ` · ${agotados} agotado${agotados === 1 ? "" : "s"}` : "");
   renderProductosAdmin(filtrados);
 }
 
@@ -636,13 +638,19 @@ function renderProductosAdmin(lista) {
     const img = p.imagen_url && p.imagen_url.trim()
       ? `<img class="thumb" src="${safeUrl(p.imagen_url)}" alt="" loading="lazy">`
       : `<div class="thumb thumb-empty">${p.categoria === "Pescadería" ? "🐟" : "🦐"}</div>`;
+    const disponible = p.disponible !== false;
     return `
-      <div class="list-item product-row">
+      <div class="list-item product-row ${disponible ? "" : "is-out"}">
         ${img}
         <div class="grow">
           <div class="title">${escapeHtml(p.nombre)}</div>
           <div class="price">$${Number(p.precio).toFixed(2)} <span class="small muted">${p.tipo_venta === "granel" ? "por kg" : "c/u"}</span></div>
           <div class="tag">${escapeHtml(p.categoria)}${p.subcategoria ? " · " + escapeHtml(p.subcategoria) : ""}</div>
+          <label class="switch mt-8">
+            <input type="checkbox" ${disponible ? "checked" : ""} onchange="cambiarDisponible(${p.id}, this.checked)">
+            <span class="switch-track"></span>
+            <span class="switch-label">${disponible ? "Disponible" : "Agotado"}</span>
+          </label>
         </div>
         <div class="row-actions">
           <button class="icon-btn" onclick="editarProducto(${p.id})" aria-label="Editar"><i class="fa-solid fa-pen"></i></button>
@@ -650,6 +658,19 @@ function renderProductosAdmin(lista) {
         </div>
       </div>`;
   }).join("");
+}
+
+async function cambiarDisponible(id, disponible) {
+  const p = productosCache.find(x => x.id === id);
+  const { error } = await supabaseClient.from("productos").update({ disponible }).eq("id", id);
+  if (error) {
+    handleError(error, "No se pudo cambiar. ¿Ya corriste el SQL de agotados en Supabase?");
+    filtrarProductos();
+    return;
+  }
+  if (p) p.disponible = disponible;
+  showToast(`${p?.nombre || "Producto"}: ${disponible ? "disponible" : "agotado"}`, "success");
+  filtrarProductos();
 }
 
 function abrirModalProducto() {
@@ -892,26 +913,125 @@ function generarVentasPorDiaSemana(pedidos) {
 // ======================
 // VENTAS EN EL RESTAURANTE
 // ======================
+// ======================
+// CAJA: CORTE DEL DÍA
+// ======================
+let cajaDatos = null;   // lo último calculado, para imprimir
+
 async function cargarVentasLocal() {
   const fecha = $("filtroFechaLocal").value || getHoy();
   $("filtroFechaLocal").value = fecha;
   const rango = rangoDiaMX(fecha);
-  const { data, error } = await supabaseClient
-    .from("pedidos")
-    .select("*")
-    .eq("tipo_pedido", "local")
-    .eq("estado_local", "cerrado")
-    .gte("fecha_cierre", rango.desde)
-    .lt("fecha_cierre", rango.hasta)
-    .order("fecha_cierre", { ascending: false });
+
+  const [local, domicilio, cortes] = await Promise.all([
+    supabaseClient.from("pedidos").select("*")
+      .eq("tipo_pedido", "local").eq("estado_local", "cerrado")
+      .gte("fecha_cierre", rango.desde).lt("fecha_cierre", rango.hasta)
+      .order("fecha_cierre", { ascending: false }),
+    supabaseClient.from("pedidos").select("id, total, metodo_pago, estado, repartidor_id, repartidor_nombre")
+      .neq("tipo_pedido", "local")
+      .gte("created_at", rango.desde).lt("created_at", rango.hasta),
+    supabaseClient.from("repartidor_cortes").select("*")
+      .gte("fecha_corte", rango.desde).lt("fecha_corte", rango.hasta)
+      .order("fecha_corte", { ascending: false })
+  ]);
+  const error = local.error || domicilio.error || cortes.error;
   if (error) {
-    handleError(error, "No se pudieron cargar las ventas del restaurante.");
+    handleError(error, "No se pudo cargar el corte de caja.");
     return;
   }
-  ventasLocalCache = data || [];
-  $("totalLocalDia").textContent = formatoDinero(ventasLocalCache.reduce((s, p) => s + Number(p.total), 0));
-  $("totalPedidosLocal").textContent = ventasLocalCache.length;
 
+  ventasLocalCache = local.data || [];
+  const pedidosDom = domicilio.data || [];
+  const entregados = pedidosDom.filter(p => p.estado === "Entregado");
+  const sinEntregar = pedidosDom.filter(p => p.estado !== "Entregado");
+  const suma = (lista) => lista.reduce((s, p) => s + Number(p.total), 0);
+
+  // Por forma de pago (domicilio solo cuenta lo ya entregado)
+  const porMetodo = { Efectivo: 0, Tarjeta: 0, Transferencia: 0, Otro: 0 };
+  entregados.forEach(p => { porMetodo[p.metodo_pago in porMetodo ? p.metodo_pago : "Otro"] += Number(p.total); });
+  ventasLocalCache.forEach(p => { porMetodo[p.metodo_pago_local in porMetodo ? p.metodo_pago_local : "Otro"] += Number(p.total); });
+
+  // Efectivo por repartidor: cobrado vs entregado
+  const reps = {};
+  const rep = (id, nombre) => (reps[id] = reps[id] || { nombre, cobrado: 0, entregado: 0, pedidos: 0 });
+  entregados.filter(p => p.metodo_pago === "Efectivo" && p.repartidor_id).forEach(p => {
+    const r = rep(p.repartidor_id, getRepartidorTextoPedido(p));
+    r.cobrado += Number(p.total);
+    r.pedidos += 1;
+  });
+  (cortes.data || []).forEach(c => {
+    const nombre = repartidoresCache.find(x => x.user_id === c.repartidor_id)?.full_name || "Repartidor";
+    rep(c.repartidor_id, nombre).entregado += Number(c.monto);
+  });
+
+  cajaDatos = {
+    fecha,
+    total: suma(entregados) + suma(ventasLocalCache),
+    porMetodo,
+    domicilio: { n: entregados.length, total: suma(entregados) },
+    sinEntregar: { n: sinEntregar.length, total: suma(sinEntregar) },
+    restaurante: { n: ventasLocalCache.length, total: suma(ventasLocalCache) },
+    repartidores: Object.values(reps).sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    cortes: cortes.data || []
+  };
+  renderCaja();
+}
+
+function renderCaja() {
+  const d = cajaDatos;
+  $("cajaTotal").textContent = formatoDinero(d.total);
+  $("cajaEfectivo").textContent = formatoDinero(d.porMetodo.Efectivo);
+  $("cajaTarjeta").textContent = formatoDinero(d.porMetodo.Tarjeta);
+  $("cajaTransferencia").textContent = formatoDinero(d.porMetodo.Transferencia);
+
+  const linea = (icono, texto, detalle, monto, clase = "") => `
+    <div class="row-between caja-linea ${clase}">
+      <span><i class="fa-solid ${icono}"></i> ${texto} <span class="small muted">${detalle}</span></span>
+      <strong>${formatoDinero(monto)}</strong>
+    </div>`;
+  $("cajaTipos").innerHTML =
+    linea("fa-motorcycle", "Domicilio entregado", `(${d.domicilio.n})`, d.domicilio.total) +
+    linea("fa-utensils", "Restaurante", `(${d.restaurante.n} mesas)`, d.restaurante.total) +
+    (d.porMetodo.Otro > 0 ? linea("fa-circle-question", "Otra forma de pago", "", d.porMetodo.Otro) : "") +
+    (d.sinEntregar.n ? linea("fa-hourglass-half", "Domicilio sin entregar", `(${d.sinEntregar.n}, no cuenta en el total)`, d.sinEntregar.total, "muted") : "");
+
+  $("cajaRepartidores").innerHTML = d.repartidores.length
+    ? d.repartidores.map(r => {
+        const debe = r.cobrado - r.entregado;
+        const estado = Math.abs(debe) < 0.01
+          ? `<span class="badge entregado no-dot">Al corriente</span>`
+          : debe > 0
+            ? `<span class="badge danger no-dot">Debe ${formatoDinero(debe)}</span>`
+            : `<span class="badge enproceso no-dot">Entregó ${formatoDinero(-debe)} de más</span>`;
+        return `
+          <div class="list-item">
+            <div class="grow stack-sm">
+              <div class="row-between wrap"><span class="title"><i class="fa-solid fa-motorcycle muted"></i> ${escapeHtml(r.nombre)}</span>${estado}</div>
+              <div class="small muted">Cobró ${formatoDinero(r.cobrado)} (${r.pedidos} ${r.pedidos === 1 ? "pedido" : "pedidos"}) · entregó ${formatoDinero(r.entregado)}</div>
+            </div>
+          </div>`;
+      }).join("")
+    : `<div class="empty-cart">Ese día no hubo cobros en efectivo de repartidores.</div>`;
+
+  $("cajaEntregas").innerHTML = d.cortes.length ? `
+    <details class="more">
+      <summary>Entregas de dinero registradas (${d.cortes.length})</summary>
+      <div class="list">
+        ${d.cortes.map(c => `
+          <div class="list-item">
+            <div class="grow">
+              <div class="title">${formatoDinero(c.monto)} · ${escapeHtml(repartidoresCache.find(x => x.user_id === c.repartidor_id)?.full_name || "Repartidor")}</div>
+              <div class="small muted">${escapeHtml(horaMX(c.fecha_corte))}${c.notas ? " · " + escapeHtml(c.notas) : ""}</div>
+            </div>
+            <button class="icon-btn" style="color:var(--danger)" onclick="eliminarCorte(${c.id})" aria-label="Borrar entrega">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>`).join("")}
+      </div>
+    </details>` : "";
+
+  // Mesas cobradas
   const cont = $("listaVentasLocal");
   if (!ventasLocalCache.length) {
     cont.innerHTML = `<div class="empty"><div class="empty-icon">🍽️</div><div class="empty-title">No hay mesas cobradas este día</div></div>`;
@@ -929,6 +1049,68 @@ async function cargarVentasLocal() {
         <i class="fa-solid fa-trash-can"></i>
       </button>
     </div>`).join("");
+}
+
+async function eliminarCorte(id) {
+  const c = cajaDatos?.cortes.find(x => x.id === id);
+  if (!confirm(`¿Borrar la entrega de ${formatoDinero(c?.monto)}? Úsalo solo para corregir un error.`)) return;
+  const { error } = await supabaseClient.from("repartidor_cortes").delete().eq("id", id);
+  if (error) {
+    handleError(error, "No se pudo borrar la entrega.");
+    return;
+  }
+  showToast("Entrega borrada", "success");
+  cargarVentasLocal();
+}
+
+function imprimirCorte() {
+  const d = cajaDatos;
+  if (!d) return;
+  const fila = (a, b, cls = "") => `<tr class="${cls}"><td>${a}</td><td class="r">${b}</td></tr>`;
+  const ventana = window.open("", "_blank", "width=420,height=700");
+  if (!ventana) {
+    showToast("Tu navegador bloqueó la ventana. Permite las ventanas emergentes.");
+    return;
+  }
+  const [y, m, dd] = d.fecha.split("-");
+  ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Corte ${dd}/${m}/${y}</title>
+    <style>
+      body { font-family: "Courier New", monospace; width: 72mm; margin: 0 auto; padding: 8px; color: #000; font-size: 12px; }
+      h2 { text-align: center; margin: 4px 0; font-size: 16px; }
+      p { margin: 2px 0; text-align: center; }
+      table { width: 100%; border-collapse: collapse; } td { padding: 2px 0; } td.r { text-align: right; white-space: nowrap; }
+      hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
+      .tot td { font-weight: bold; font-size: 15px; } h3 { font-size: 12px; margin: 6px 0 2px; }
+      .no-print { text-align: center; margin-top: 16px; } .no-print button { font-size: 16px; padding: 10px 16px; margin: 4px; }
+      @media print { .no-print { display: none; } }
+    </style></head><body>
+    <h2>🐟 FISH-MAR</h2>
+    <p>CORTE DE CAJA · ${dd}/${m}/${y}</p>
+    <p>Impreso: ${escapeHtml(fechaHoraCortaMX(new Date()))}</p>
+    <hr><table>
+      ${fila("Efectivo", formatoDinero(d.porMetodo.Efectivo))}
+      ${fila("Tarjeta", formatoDinero(d.porMetodo.Tarjeta))}
+      ${fila("Transferencia", formatoDinero(d.porMetodo.Transferencia))}
+      ${d.porMetodo.Otro > 0 ? fila("Otro", formatoDinero(d.porMetodo.Otro)) : ""}
+      ${fila("TOTAL", formatoDinero(d.total), "tot")}
+    </table><hr>
+    <table>
+      ${fila(`Domicilio (${d.domicilio.n})`, formatoDinero(d.domicilio.total))}
+      ${fila(`Restaurante (${d.restaurante.n})`, formatoDinero(d.restaurante.total))}
+      ${d.sinEntregar.n ? fila(`Sin entregar (${d.sinEntregar.n})`, formatoDinero(d.sinEntregar.total)) : ""}
+    </table>
+    ${d.repartidores.length ? `<hr><h3>EFECTIVO REPARTIDORES</h3><table>
+      ${d.repartidores.map(r => fila(escapeHtml(r.nombre), "") +
+        fila("&nbsp;&nbsp;Cobró", formatoDinero(r.cobrado)) +
+        fila("&nbsp;&nbsp;Entregó", formatoDinero(r.entregado)) +
+        fila("&nbsp;&nbsp;Debe", formatoDinero(Math.max(r.cobrado - r.entregado, 0)))).join("")}
+    </table>` : ""}
+    <hr><p>Firma: ______________________</p>
+    <div class="no-print"><button onclick="window.print()">🖨️ Imprimir</button><button onclick="window.close()">Cerrar</button></div>
+    </body></html>`);
+  ventana.document.close();
 }
 
 function verDetallePedidoLocalModal(pedidoId) {

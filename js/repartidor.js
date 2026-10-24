@@ -302,23 +302,8 @@ async function registrarEntrega() {
 // ======================
 // HISTORIAL DE ENTREGAS
 // ======================
-async function limpiarRegistrosAntiguos() {
-  const fechaLimite = new Date();
-  fechaLimite.setDate(fechaLimite.getDate() - 8);
-
-  const { error } = await supabaseClient
-    .from("repartidor_cortes")
-    .delete()
-    .lt("fecha_corte", fechaLimite.toISOString())
-    .eq("repartidor_id", userIdActual);
-
-  if (error) console.error("Error al limpiar registros antiguos:", error);
-}
-
 async function cargarHistorialEntregas() {
   if (!userIdActual) return;
-
-  await limpiarRegistrosAntiguos();
 
   let query = supabaseClient
     .from("repartidor_cortes")
@@ -350,28 +335,7 @@ async function cargarHistorialEntregas() {
         <div class="small muted">${escapeHtml(fechaHoraCortaMX(corte.fecha_corte))}</div>
         ${corte.notas ? `<div class="small">${escapeHtml(corte.notas)}</div>` : ""}
       </div>
-      <button class="btn btn-text danger" onclick="eliminarRegistroEntrega(${corte.id})" aria-label="Borrar">
-        <i class="fa-solid fa-trash-can"></i>
-      </button>
     </div>`).join("");
-}
-
-async function eliminarRegistroEntrega(id) {
-  if (!confirm("¿Borrar este registro de entrega? No se puede deshacer.")) return;
-
-  const { error } = await supabaseClient
-    .from("repartidor_cortes")
-    .delete()
-    .eq("id", id)
-    .eq("repartidor_id", userIdActual);
-
-  if (error) {
-    handleError(error, "No se pudo borrar el registro.");
-    return;
-  }
-  showToast("Registro borrado", "success");
-  await cargarHistorialEntregas();
-  await actualizarResumenEfectivo();
 }
 
 function limpiarFiltroHistorial() {

@@ -145,6 +145,10 @@ function renderCarrito() {
 function addToCart(id) {
   const producto = productos.find(p => p.id === id);
   if (!producto) return;
+  if (producto.disponible === false) {
+    showToast(`${producto.nombre} está agotado por hoy.`);
+    return;
+  }
 
   let cantidad = 1;
   if (producto.tipo_venta === "granel") {
@@ -233,8 +237,12 @@ function renderProductos() {
     return;
   }
 
+  // Los agotados van al final
+  filtrados = [...filtrados].sort((a, b) => (a.disponible === false) - (b.disponible === false));
+
   cont.innerHTML = filtrados.map(p => {
     const esGranel = p.tipo_venta === "granel";
+    const agotado = p.disponible === false;
     const precio = Number(p.precio);
     const img = p.imagen_url && p.imagen_url.trim()
       ? `<img class="product-img" src="${safeUrl(p.imagen_url)}" alt="${escapeHtml(p.nombre)}" loading="lazy">`
@@ -249,8 +257,15 @@ function renderProductos() {
       </div>
       <span class="kg-hint">kg · <strong id="price-${p.id}">$${(0.5 * precio).toFixed(2)}</strong></span>` : "";
 
+    const acciones = agotado
+      ? `<div class="out-label"><i class="fa-solid fa-ban"></i> Agotado por hoy</div>`
+      : `${kgHtml}
+          <button class="btn btn-accent" id="add-${p.id}" onclick="addToCart(${p.id})">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>`;
+
     return `
-      <article class="product">
+      <article class="product ${agotado ? "is-out" : ""}">
         ${img}
         <div class="product-info">
           <div class="product-cat">${escapeHtml(p.subcategoria || p.categoria)}</div>
@@ -259,10 +274,7 @@ function renderProductos() {
           <div class="product-price">$${precio.toFixed(2)} <small>${esGranel ? "por kg" : "c/u"}</small></div>
         </div>
         <div class="product-actions">
-          ${kgHtml}
-          <button class="btn btn-accent" id="add-${p.id}" onclick="addToCart(${p.id})">
-            <i class="fa-solid fa-plus"></i> Agregar
-          </button>
+          ${acciones}
         </div>
       </article>`;
   }).join("");

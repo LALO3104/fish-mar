@@ -31,7 +31,7 @@
   <button class="tab-btn active" data-tab="pedidos"><i class="fa-solid fa-motorcycle"></i><span>Pedidos</span></button>
   <button class="tab-btn" data-tab="productos"><i class="fa-solid fa-fish"></i><span>Productos</span></button>
   <button class="tab-btn" data-tab="metricas"><i class="fa-solid fa-chart-line"></i><span>Ventas</span></button>
-  <button class="tab-btn" data-tab="ventaslocal"><i class="fa-solid fa-utensils"></i><span>Local</span></button>
+  <button class="tab-btn" data-tab="ventaslocal"><i class="fa-solid fa-cash-register"></i><span>Caja</span></button>
   <button class="tab-btn" data-tab="usuarios" id="tabUsuariosBtn" hidden><i class="fa-solid fa-users"></i><span>Usuarios</span></button>
 </nav>
 
@@ -135,13 +135,14 @@
     </div>
   </section>
 
-  <!-- ============ VENTAS EN EL LOCAL ============ -->
+  <!-- ============ CAJA: CORTE DEL DÍA ============ -->
   <section id="tabVentaslocal" class="tab-pane">
     <div class="section-head">
       <div>
-        <h2 class="section-title">Ventas en el restaurante</h2>
-        <p class="section-sub">Mesas cobradas por los meseros</p>
+        <h2 class="section-title">Corte de caja</h2>
+        <p class="section-sub">Todo lo vendido en el día</p>
       </div>
+      <button class="btn btn-outline" onclick="imprimirCorte()"><i class="fa-solid fa-print"></i> Imprimir</button>
     </div>
     <div class="row">
       <div class="field grow">
@@ -150,11 +151,28 @@
       </div>
       <button class="btn btn-soft" onclick="limpiarFiltroLocal()">Hoy</button>
     </div>
+
     <div class="stats mt-16">
-      <div class="stat highlight"><div class="stat-label">Total del día</div><div class="stat-value" id="totalLocalDia">$0.00</div></div>
-      <div class="stat"><div class="stat-label">Mesas cobradas</div><div class="stat-value" id="totalPedidosLocal">0</div></div>
+      <div class="stat highlight"><div class="stat-label">Total vendido</div><div class="stat-value" id="cajaTotal">$0.00</div></div>
+      <div class="stat"><div class="stat-label"><i class="fa-solid fa-money-bill-wave"></i> Efectivo</div><div class="stat-value" id="cajaEfectivo">$0.00</div></div>
+      <div class="stat"><div class="stat-label"><i class="fa-solid fa-credit-card"></i> Tarjeta</div><div class="stat-value" id="cajaTarjeta">$0.00</div></div>
+      <div class="stat"><div class="stat-label"><i class="fa-solid fa-building-columns"></i> Transferencia</div><div class="stat-value" id="cajaTransferencia">$0.00</div></div>
     </div>
-    <div id="listaVentasLocal" class="list mt-16"></div>
+
+    <div class="card mt-16">
+      <h3 class="strong">Por tipo de venta</h3>
+      <div id="cajaTipos" class="stack-sm mt-8"></div>
+    </div>
+
+    <div class="card mt-16">
+      <h3 class="strong">Efectivo de repartidores</h3>
+      <p class="small muted">Lo que cobraron en efectivo contra lo que ya entregaron ese día.</p>
+      <div id="cajaRepartidores" class="list mt-8"></div>
+      <div id="cajaEntregas" class="mt-8"></div>
+    </div>
+
+    <h3 class="strong mt-24">Mesas cobradas</h3>
+    <div id="listaVentasLocal" class="list mt-8"></div>
   </section>
 
   <!-- ============ USUARIOS (solo superadmin) ============ -->

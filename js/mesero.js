@@ -146,12 +146,15 @@ function renderProductosMesero() {
     return;
   }
 
+  filtrados = [...filtrados].sort((a, b) => (a.disponible === false) - (b.disponible === false));
+
   cont.innerHTML = filtrados.map(p => {
     const esGranel = p.tipo_venta === "granel";
+    const agotado = p.disponible === false;
     const img = p.imagen_url
       ? `<img class="thumb" src="${safeUrl(p.imagen_url)}" alt="" loading="lazy">`
       : `<div class="thumb thumb-empty">🦐</div>`;
-    const kgHtml = esGranel ? `
+    const kgHtml = esGranel && !agotado ? `
       <div class="kg-row">
         <div class="stepper">
           <button type="button" onclick="ajustarKgMesero(${p.id}, -0.25)" aria-label="Menos">−</button>
@@ -160,17 +163,20 @@ function renderProductosMesero() {
         </div>
         <span class="small muted">kg</span>
       </div>` : "";
+    const boton = agotado
+      ? `<span class="out-label small">Agotado</span>`
+      : `<button class="add-btn" id="add-${p.id}" onclick="agregarAlPedidoActual(${p.id})" aria-label="Agregar ${escapeHtml(p.nombre)}">
+          <i class="fa-solid fa-plus"></i>
+        </button>`;
     return `
-      <div class="menu-item">
+      <div class="menu-item ${agotado ? "is-out" : ""}">
         ${img}
         <div class="grow">
           <div class="mi-name">${escapeHtml(p.nombre)}</div>
           <div class="mi-price">$${Number(p.precio).toFixed(2)} ${esGranel ? "por kg" : ""}</div>
           ${kgHtml}
         </div>
-        <button class="add-btn" id="add-${p.id}" onclick="agregarAlPedidoActual(${p.id})" aria-label="Agregar ${escapeHtml(p.nombre)}">
-          <i class="fa-solid fa-plus"></i>
-        </button>
+        ${boton}
       </div>`;
   }).join("");
 }
@@ -342,6 +348,10 @@ function agregarAlPedidoActual(productoId) {
   }
   const producto = productos.find(p => p.id === productoId);
   if (!producto) return;
+  if (producto.disponible === false) {
+    showToast(`${producto.nombre} está agotado.`);
+    return;
+  }
 
   let cantidad = 1;
   if (producto.tipo_venta === "granel") {
