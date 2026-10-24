@@ -2,272 +2,121 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d2a38" />
   <title>FishMar | Repartidor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link rel="stylesheet" href="css/styles.css" />
-  <style>
-    .toolbar {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-      margin-bottom: 20px;
-    }
-    .toolbar input, .toolbar button {
-      border-radius: 40px;
-      padding: 8px 16px;
-      border: 1px solid #e2e8f0;
-      background: white;
-    }
-    .toolbar button {
-      background: #0ea5a4;
-      color: white;
-      border: none;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    .toolbar button.secondary {
-      background: #2c3e50;
-    }
-    .summary-card {
-      background: linear-gradient(135deg, #0ea5a4, #0b7f7e);
-      color: white;
-      border-radius: 24px;
-      padding: 20px;
-      margin-bottom: 24px;
-      text-align: center;
-    }
-    .summary-card h3 {
-      margin: 0 0 12px 0;
-      font-size: 1.2rem;
-    }
-    .summary-stats {
-      display: flex;
-      justify-content: space-around;
-      flex-wrap: wrap;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-    .summary-stats div {
-      background: rgba(255,255,255,0.2);
-      border-radius: 16px;
-      padding: 10px 20px;
-      min-width: 120px;
-    }
-    .summary-stats strong {
-      display: block;
-      font-size: 1.8rem;
-    }
-    .small-btn {
-      background: white;
-      color: #0ea5a4;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 40px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .delete-btn {
-      background: #dc2626;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 0.8rem;
-      margin-left: 12px;
-    }
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 2000;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0,0,0,0.5);
-      backdrop-filter: blur(4px);
-    }
-    .modal-content {
-      background-color: white;
-      margin: 10% auto;
-      width: 90%;
-      max-width: 500px;
-      border-radius: 28px;
-      overflow: hidden;
-      animation: slideUp 0.3s ease;
-    }
-    .modal-header {
-      padding: 1rem 1.5rem;
-      background: #0ea5a4;
-      color: white;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .modal-body {
-      padding: 1.5rem;
-    }
-    .modal-footer {
-      padding: 1rem 1.5rem;
-      background: #f8fafc;
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-    }
-
-    /* ===== Celular ===== */
-    @media (max-width: 600px) {
-      .summary-card {
-        padding: 14px;
-        border-radius: 18px;
-        margin-bottom: 12px;
-      }
-      .summary-stats {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        margin-bottom: 12px;
-      }
-      .summary-stats div {
-        min-width: 0;
-        padding: 8px 6px;
-        font-size: 0.75rem;
-      }
-      .summary-stats strong {
-        font-size: 1.05rem;
-      }
-      .summary-card .small-btn {
-        width: 100%;
-        min-height: 44px;
-      }
-      .toolbar input,
-      .toolbar button {
-        flex: 1 1 auto;
-        min-height: 42px;
-      }
-      .modal-content {
-        width: calc(100% - 24px);
-        margin: 20% auto 0;
-      }
-      .modal-footer button {
-        flex: 1;
-        min-height: 44px;
-      }
-    }
-    .close-modal {
-      font-size: 1.8rem;
-      cursor: pointer;
-    }
-    .form-group {
-      margin-bottom: 1rem;
-    }
-    .form-group label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 600;
-    }
-    .form-group input, .form-group textarea {
-      width: 100%;
-      padding: 10px;
-      border-radius: 12px;
-      border: 1px solid #cbd5e1;
-    }
-    @keyframes slideUp {
-      from { transform: translateY(50px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-  </style>
 </head>
 <body>
 
-<header class="header">
-  <div class="header-inner">
-    <div class="logo-area">
-      <h1>🐟 Fish-Mar Repartidor</h1>
-      <p class="tagline">Solo tus pedidos asignados</p>
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand">
+      <div class="brand-logo">🛵</div>
+      <div class="brand-text">
+        <div class="brand-title" id="nombreRepartidor">Repartidor</div>
+        <div class="brand-sub">Tus entregas de FishMar</div>
+      </div>
     </div>
-    <button class="ghost-btn" onclick="logout()">Cerrar sesión</button>
+    <button class="btn-appbar" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
   </div>
 </header>
 
-<main class="container">
+<main class="page stack">
 
-  <section class="stats-grid">
-    <div class="stat-card">
-      <h4>Pedidos asignados</h4>
-      <p id="statAsignados">0</p>
+  <!-- Dinero del día -->
+  <section class="money-card">
+    <div class="row-between">
+      <div>
+        <div class="money-label">Dinero que debes entregar hoy</div>
+        <div class="money-amount" id="saldoPendiente">$0.00</div>
+      </div>
+      <div class="money-icon"><i class="fa-solid fa-wallet"></i></div>
     </div>
-    <div class="stat-card">
-      <h4>En camino</h4>
-      <p id="statCamino">0</p>
+    <div class="money-split">
+      <div><span>Cobraste en efectivo</span><strong id="totalRecaudado">$0.00</strong></div>
+      <div><span>Ya entregaste</span><strong id="totalEntregado">$0.00</strong></div>
     </div>
-    <div class="stat-card">
-      <h4>Entregados</h4>
-      <p id="statEntregadosR">0</p>
-    </div>
+    <button class="btn btn-block btn-lg money-btn" onclick="abrirModalEntrega()">
+      <i class="fa-solid fa-hand-holding-dollar"></i> Entregar dinero al negocio
+    </button>
   </section>
 
-  <div id="resumenEfectivo" class="summary-card">
-    <h3>💰 Resumen de recaudación</h3>
-    <div class="summary-stats">
-      <div><strong id="totalRecaudado">$0.00</strong><br>Recaudado</div>
-      <div><strong id="totalEntregado">$0.00</strong><br>Entregado a admin</div>
-      <div><strong id="saldoPendiente">$0.00</strong><br>Saldo pendiente</div>
-    </div>
-    <button class="small-btn" onclick="abrirModalEntrega()">💸 Entregar dinero</button>
-  </div>
-
-  <div class="panel" style="margin-top: 16px;">
-    <div class="panel-header">
-      <h2>Mis pedidos</h2>
-      <div class="toolbar">
-        <input type="date" id="filtroFechaRepartidor" onchange="cargarPedidosRepartidor()" />
-        <button class="primary-btn" onclick="ponerHoyRepartidor()">Hoy</button>
-        <button class="secondary" onclick="limpiarFiltroRepartidor()">Limpiar filtro</button>
+  <!-- Pedidos -->
+  <section id="seccionPedidos">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Mis pedidos</h2>
+        <p class="section-sub" id="resumenPedidos">Cargando…</p>
       </div>
     </div>
-    <div id="misPedidos" class="admin-list"></div>
-  </div>
+    <div class="chips" id="filtrosRepartidor">
+      <button class="chip is-active" data-modo="pendientes">Por entregar <span class="count" id="countPendientes">0</span></button>
+      <button class="chip" data-modo="hoy">Todos los de hoy</button>
+      <button class="chip" data-modo="fecha"><i class="fa-regular fa-calendar"></i> Otro día</button>
+    </div>
+    <div class="field mt-8" id="campoFecha" hidden>
+      <label for="filtroFechaRepartidor">Elige el día</label>
+      <input type="date" id="filtroFechaRepartidor" class="input" />
+    </div>
+    <div id="misPedidos" class="stack mt-16"></div>
+  </section>
 
-  <!-- Historial de entregas con filtro de fechas y botón eliminar -->
-  <div class="panel" style="margin-top: 24px;">
-    <div class="panel-header">
-      <h2>📋 Historial de entregas a administración</h2>
-      <div class="toolbar" style="gap: 8px;">
-        <input type="date" id="historialFechaInicio" placeholder="Desde" />
-        <input type="date" id="historialFechaFin" placeholder="Hasta" />
-        <button class="primary-btn" onclick="cargarHistorialEntregas()">Filtrar</button>
-        <button class="secondary-btn" onclick="limpiarFiltroHistorial()">Limpiar</button>
+  <!-- Historial de dinero entregado -->
+  <details class="more card" id="seccionHistorial">
+    <summary><span><i class="fa-solid fa-clock-rotate-left"></i> Dinero que ya entregaste</span></summary>
+    <div class="stack mt-8">
+      <div class="row">
+        <div class="field grow">
+          <label for="historialFechaInicio" class="small">Desde</label>
+          <input type="date" id="historialFechaInicio" class="input" />
+        </div>
+        <div class="field grow">
+          <label for="historialFechaFin" class="small">Hasta</label>
+          <input type="date" id="historialFechaFin" class="input" />
+        </div>
       </div>
+      <div class="row">
+        <button class="btn btn-soft grow" onclick="cargarHistorialEntregas()">Buscar</button>
+        <button class="btn btn-outline grow" onclick="limpiarFiltroHistorial()">Ver todo</button>
+      </div>
+      <div id="historialEntregas" class="list"></div>
     </div>
-    <div id="historialEntregas" class="admin-list">
-      <div class="panel">Cargando historial...</div>
-    </div>
-  </div>
-
+  </details>
 </main>
 
-<!-- Modal para entregar dinero -->
-<div id="modalEntrega" class="modal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3>💸 Registrar entrega de dinero</h3>
-      <span class="close-modal" onclick="cerrarModalEntrega()">&times;</span>
+<!-- Hoja: entregar dinero -->
+<div id="modalEntrega" class="modal" onclick="if (event.target === this) cerrarModalEntrega()">
+  <div class="sheet">
+    <div class="sheet-header">
+      <h3 class="sheet-title">Entregar dinero</h3>
+      <button class="sheet-close" onclick="cerrarModalEntrega()" aria-label="Cerrar">&times;</button>
     </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Monto a entregar ($)</label>
-        <input type="number" id="entregaMonto" step="0.01" min="0.01" placeholder="Ej: 1500.00" />
+    <div class="sheet-body">
+      <div class="total-line">
+        <span class="muted strong">Te falta entregar hoy</span>
+        <span class="amount" id="saldoModal">$0.00</span>
       </div>
-      <div class="form-group">
-        <label>Nota (opcional)</label>
-        <textarea id="entregaNotas" rows="2" placeholder="Ej: Entrega parcial del día"></textarea>
+      <button class="btn btn-soft btn-block" onclick="entregarTodo()">
+        <i class="fa-solid fa-check-double"></i> Entregar todo
+      </button>
+      <div class="field">
+        <label for="entregaMonto">¿Cuánto vas a entregar?</label>
+        <input type="number" id="entregaMonto" class="input" inputmode="decimal" step="0.01" min="0.01" placeholder="Ej. 500" />
+      </div>
+      <div class="field">
+        <label for="entregaNotas">Nota (opcional)</label>
+        <input type="text" id="entregaNotas" class="input" maxlength="200" placeholder="Ej. Se lo di a la cajera" />
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="secondary-btn" onclick="cerrarModalEntrega()">Cancelar</button>
-      <button class="primary-btn" onclick="registrarEntrega()">Registrar entrega</button>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-lg btn-block" id="btnRegistrarEntrega" onclick="registrarEntrega()">
+        <i class="fa-solid fa-check"></i> Registrar entrega
+      </button>
     </div>
   </div>
 </div>

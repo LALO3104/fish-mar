@@ -1,12 +1,9 @@
-+// js/admin.js
+// js/admin.js — pantalla de inicio de sesión
 
 function mostrarError(mensaje) {
   const errorDiv = document.getElementById("loginError");
   errorDiv.textContent = mensaje;
   errorDiv.classList.add("show");
-  setTimeout(() => {
-    errorDiv.classList.remove("show");
-  }, 5000);
 }
 
 function limpiarError() {
@@ -15,92 +12,101 @@ function limpiarError() {
   errorDiv.textContent = "";
 }
 
+function setCargando(cargando) {
+  const btn = document.getElementById("btnEntrar");
+  if (!btn) return;
+  btn.disabled = cargando;
+  btn.innerHTML = cargando
+    ? '<i class="fa-solid fa-spinner fa-spin"></i> Entrando…'
+    : 'Entrar <i class="fa-solid fa-arrow-right"></i>';
+}
+
 async function login() {
   limpiarError();
 
   const email = document.getElementById("email").value.trim();
-  const password = document.getElementById("password").value.trim();
+  const password = document.getElementById("password").value;
 
   if (!email || !password) {
-    mostrarError("❌ Por favor, ingresa tu correo y contraseña.");
+    mostrarError("Escribe tu correo y tu contraseña.");
     return;
   }
 
-  // Validación básica de formato de email
   const emailRegex = /^[^\s@]+@([^\s@.,]+\.)+[^\s@.,]{2,}$/;
   if (!emailRegex.test(email)) {
-    mostrarError("📧 El correo electrónico no tiene un formato válido.");
+    mostrarError("El correo no está bien escrito. Revisa que tenga @ y un punto.");
     return;
   }
 
+  setCargando(true);
   try {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email,
-      password
-    });
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (error) {
       switch (error.message) {
         case "Invalid login credentials":
-          mostrarError("🔐 Correo o contraseña incorrectos. Verifica tus datos.");
+          mostrarError("El correo o la contraseña no son correctos. Inténtalo de nuevo.");
           break;
         case "Email not confirmed":
-          mostrarError("📬 Tu correo aún no ha sido confirmado. Revisa tu bandeja de entrada.");
-          break;
-        case "User not found":
-          mostrarError("👤 No existe una cuenta con ese correo electrónico.");
-          break;
-        case "Password should be at least 6 characters":
-          mostrarError("🔒 La contraseña debe tener al menos 6 caracteres.");
+          mostrarError("Tu correo aún no está confirmado. Pide ayuda al administrador.");
           break;
         default:
-          mostrarError(`⚠️ Error al iniciar sesión: ${error.message}`);
+          mostrarError(`No se pudo entrar: ${error.message}`);
       }
       return;
     }
 
     if (!data.user) {
-      mostrarError("⚠️ No se pudo obtener la información del usuario.");
+      mostrarError("No se pudo obtener tu información. Inténtalo de nuevo.");
       return;
     }
 
-    const userId = data.user.id;
-
-    // Verificar rol
     const { data: roleRow, error: roleError } = await supabaseClient
       .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
+      .select("role, is_superadmin")
+      .eq("user_id", data.user.id)
       .single();
 
     if (roleError || !roleRow) {
-      mostrarError("🚫 Tu usuario no tiene un rol asignado. Contacta al administrador.");
+      mostrarError("Tu usuario no tiene un puesto asignado. Pide ayuda al administrador.");
       await supabaseClient.auth.signOut();
       return;
     }
 
+    // Llevar a cada quien a su pantalla
     const rol = roleRow.role;
-
-    // Redirigir según el rol
-    if (rol === "admin" || rol === "superadmin") {
+    if (rol === "admin" || rol === "superadmin" || roleRow.is_superadmin) {
       window.location.href = "dashboard.html";
     } else if (rol === "repartidor") {
       window.location.href = "repartidor.html";
     } else if (rol === "mesero") {
       window.location.href = "mesero.html";
     } else {
-      mostrarError("❓ Rol de usuario no válido. Contacta al administrador.");
+      mostrarError("Tu puesto no es válido. Pide ayuda al administrador.");
       await supabaseClient.auth.signOut();
     }
-
   } catch (err) {
     console.error("Error inesperado:", err);
-    mostrarError("🌐 Error de conexión. Intenta de nuevo más tarde.");
+    mostrarError("No hay conexión. Revisa tu internet e inténtalo de nuevo.");
+  } finally {
+    setCargando(false);
   }
 }
 
-// Limpiar error cuando el usuario empieza a escribir
-const emailInput = document.getElementById("email");
-const passwordInput = document.getElementById("password");
-if (emailInput) emailInput.addEventListener("input", limpiarError);
-if (passwordInput) passwordInput.addEventListener("input", limpiarError);
+document.getElementById("loginForm")?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  login();
+});
+
+document.getElementById("togglePassword")?.addEventListener("click", () => {
+  const input = document.getElementById("password");
+  const btn = document.getElementById("togglePassword");
+  const mostrar = input.type === "password";
+  input.type = mostrar ? "text" : "password";
+  btn.innerHTML = mostrar
+    ? '<i class="fa-regular fa-eye-slash"></i> Ocultar'
+    : '<i class="fa-regular fa-eye"></i> Ver';
+});
+
+document.getElementById("email")?.addEventListener("input", limpiarError);
+document.getElementById("password")?.addEventListener("input", limpiarError);

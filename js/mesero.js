@@ -1,6 +1,7 @@
-// js/mesero.js
+// js/mesero.js — toma de pedidos en el restaurante
+// Dependencias: supabaseClient (supabase.js), utils.js
+
 let productos = [];
-let categoriaActual = "Marisquería";   // Siempre Marisquería
 let subcategoriaActual = "";
 let pedidosActivos = [];
 let pedidoSeleccionadoId = null;
@@ -8,43 +9,90 @@ let carritoActual = [];
 let meseroId = null;
 let textoBusqueda = "";
 
-// Variables para descuento y comisión en cierre
+// Descuento y comisión del cobro
 let descuentoValor = 0;
 let descuentoTipo = "monto";
 let descuentoMonto = 0;
-let comisionTarjeta = 0;       // 4.5% sobre total después de descuento
+let comisionTarjeta = 0;       // 4.5% sobre el total después del descuento
 
-// DOM elements
-const listaPedidosDiv = document.getElementById("listaPedidosActivos");
-const productosDiv = document.getElementById("productosMesero");
-const carritoDiv = document.getElementById("carritoActual");
-const totalSpan = document.getElementById("totalActual");
-const mesaActualSpan = document.getElementById("mesaActual");
-const buscadorInput = document.getElementById("buscadorProductos");
+// Guardado automático
+let guardadoPendiente = null;  // { id, items }
+let timerGuardado = null;
+
+const MESAS_RAPIDAS = [
+  "Mesa 1", "Mesa 2", "Mesa 3", "Mesa 4", "Mesa 5", "Mesa 6",
+  "Mesa 7", "Mesa 8", "Mesa 9", "Mesa 10", "Barra", "Para llevar"
+];
+
+const $ = (id) => document.getElementById(id);
 
 // ======================
-// AUTENTICACIÓN
+// SESIÓN
 // ======================
 async function verificarSesionMesero() {
   const { data, error } = await supabaseClient.auth.getUser();
   if (error || !data?.user) {
-    showToast("No hay sesión activa.");
     window.location.href = "admin.html";
     return false;
   }
-  const userId = data.user.id;
   const { data: rolData, error: rolError } = await supabaseClient
     .from("user_roles")
     .select("role, full_name")
-    .eq("user_id", userId)
+    .eq("user_id", data.user.id)
     .single();
-  if (rolError || rolData.role !== "mesero") {
-    showToast("Acceso solo para meseros.");
+  if (rolError || !rolData || rolData.role !== "mesero") {
+    showToast("Esta pantalla es solo para meseros.");
     window.location.href = "admin.html";
     return false;
   }
-  meseroId = userId;
+  meseroId = data.user.id;
+  $("saludoMesero").textContent = `Hola, ${rolData.full_name || "mesero"}`;
   return true;
+}
+
+async function logout() {
+  await guardarPendiente();
+  await supabaseClient.auth.signOut();
+  window.location.href = "admin.html";
+}
+
+// ======================
+// UTILIDADES
+// ======================
+function calcularTotalPedido(items) {
+  if (!items) return 0;
+  return items.reduce((sum, i) => sum + Number(i.precio) * Number(i.qty), 0);
+}
+
+function contarPiezas(items) {
+  return (items || []).reduce((n, i) => n + (i.tipo_venta === "granel" ? 1 : Number(i.qty)), 0);
+}
+
+function formatoCantidad(item) {
+  return item.tipo_venta === "granel"
+    ? `${Number(item.qty).toFixed(2)} kg`
+    : `${Number(item.qty)}`;
+}
+
+function hace(fechaIso) {
+  const min = Math.floor((Date.now() - new Date(fechaIso).getTime()) / 60000);
+  if (isNaN(min)) return "";
+  if (min < 1) return "recién abierta";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  return `hace ${h} h ${min % 60} min`;
+}
+
+function abrirHoja(id) {
+  $(id).style.display = "block";
+  document.body.classList.add("no-scroll");
+}
+
+function cerrarHoja(id) {
+  $(id).style.display = "none";
+  if (![...document.querySelectorAll(".modal")].some(m => m.style.display === "block")) {
+    document.body.classList.remove("no-scroll");
+  }
 }
 
 // ======================
@@ -54,75 +102,89 @@ async function cargarProductosMesero() {
   const { data, error } = await supabaseClient
     .from("productos")
     .select("*")
-    .eq("categoria", "Marisquería")   // ← Filtrar solo Marisquería
+    .eq("categoria", "Marisquería")
     .order("id");
   if (error) {
-    handleError(error);
+    handleError(error, "No se pudieron cargar los productos. Revisa tu internet.");
     return;
   }
   productos = data || [];
+  renderSubcategorias();
   renderProductosMesero();
-  // Construir subcategorías dinámicas
-  const subcats = [...new Set(productos.map(p => p.subcategoria).filter(Boolean))];
-  const subBar = document.getElementById("subcategoriaBarMesero");
-  if (subBar) {
-    subBar.innerHTML = `<button class="subcat-btn active" data-sub="">Todas</button>` +
-      subcats.map(s => `<button class="subcat-btn" data-sub="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('');
-    subBar.style.display = "flex";
-    document.querySelectorAll("#subcategoriaBarMesero .subcat-btn").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        subcategoriaActual = e.target.dataset.sub;
-        renderProductosMesero();
-      });
-    });
-  }
 }
 
-function filtrarProductosPorTexto() {
-  renderProductosMesero();
+function renderSubcategorias() {
+  const subcats = [...new Set(productos.map(p => p.subcategoria).filter(Boolean))];
+  const bar = $("subcategoriaBarMesero");
+  bar.innerHTML = [""].concat(subcats).map(s => `
+    <button class="chip ${s === subcategoriaActual ? "is-active" : ""}" data-sub="${escapeHtml(s)}">
+      ${s ? escapeHtml(s) : "Todo"}
+    </button>`).join("");
+  bar.querySelectorAll(".chip").forEach(btn => {
+    btn.addEventListener("click", () => {
+      subcategoriaActual = btn.dataset.sub;
+      renderSubcategorias();
+      renderProductosMesero();
+    });
+  });
 }
 
 function renderProductosMesero() {
-  if (!productosDiv) return;
-  
+  const cont = $("productosMesero");
   let filtrados = productos;
-  // Filtrar por subcategoría
-  if (subcategoriaActual) {
-    filtrados = filtrados.filter(p => p.subcategoria === subcategoriaActual);
-  }
-  // Filtrar por texto de búsqueda
-  if (textoBusqueda.trim() !== "") {
-    const busq = textoBusqueda.toLowerCase();
-    filtrados = filtrados.filter(p => p.nombre.toLowerCase().includes(busq));
+  if (subcategoriaActual) filtrados = filtrados.filter(p => p.subcategoria === subcategoriaActual);
+  const busq = textoBusqueda.trim().toLowerCase();
+  if (busq) filtrados = filtrados.filter(p => p.nombre.toLowerCase().includes(busq));
+
+  if (!filtrados.length) {
+    cont.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🔎</div>
+        <div class="empty-title">No encontramos ese producto</div>
+        <p class="mt-8">Prueba con otra palabra o elige "Todo".</p>
+      </div>`;
+    return;
   }
 
-  productosDiv.innerHTML = filtrados.map(p => {
-    const img = p.imagen_url ? safeUrl(p.imagen_url) : "https://via.placeholder.com/300x200?text=Sin+imagen";
-    const tipoVenta = p.tipo_venta === 'granel' ? 'kg' : 'pieza';
-    const esGranel = p.tipo_venta === 'granel';
-    let inputHtml = '';
-    if (esGranel) {
-      inputHtml = `<div class="quantity-selector">
-        <input type="number" id="kg-${p.id}" class="qty-input" value="0.1" step="0.01" min="0.01" style="width:80px;">
-        <span>kg</span>
-      </div>`;
-    }
-    return `
-      <div class="product-card">
-        <img class="product-image" src="${img}" alt="${escapeHtml(p.nombre)}" loading="lazy">
-        <div class="product-body">
-          <div class="product-name">${escapeHtml(p.nombre)}</div>
-          <div class="price">$${Number(p.precio).toFixed(2)} / ${tipoVenta}</div>
-          ${inputHtml}
-          <button class="small-btn" onclick="agregarAlPedidoActual(${p.id})">Agregar</button>
+  cont.innerHTML = filtrados.map(p => {
+    const esGranel = p.tipo_venta === "granel";
+    const img = p.imagen_url
+      ? `<img class="thumb" src="${safeUrl(p.imagen_url)}" alt="" loading="lazy">`
+      : `<div class="thumb thumb-empty">🦐</div>`;
+    const kgHtml = esGranel ? `
+      <div class="kg-row">
+        <div class="stepper">
+          <button type="button" onclick="ajustarKgMesero(${p.id}, -0.25)" aria-label="Menos">−</button>
+          <input type="number" id="kg-${p.id}" value="0.5" step="0.05" min="0.05" inputmode="decimal" aria-label="Kilos">
+          <button type="button" onclick="ajustarKgMesero(${p.id}, 0.25)" aria-label="Más">+</button>
         </div>
-      </div>
-    `;
+        <span class="small muted">kg</span>
+      </div>` : "";
+    return `
+      <div class="menu-item">
+        ${img}
+        <div class="grow">
+          <div class="mi-name">${escapeHtml(p.nombre)}</div>
+          <div class="mi-price">$${Number(p.precio).toFixed(2)} ${esGranel ? "por kg" : ""}</div>
+          ${kgHtml}
+        </div>
+        <button class="add-btn" id="add-${p.id}" onclick="agregarAlPedidoActual(${p.id})" aria-label="Agregar ${escapeHtml(p.nombre)}">
+          <i class="fa-solid fa-plus"></i>
+        </button>
+      </div>`;
   }).join("");
 }
 
+function ajustarKgMesero(id, delta) {
+  const input = $(`kg-${id}`);
+  if (!input) return;
+  let kg = (parseFloat(input.value) || 0) + delta;
+  if (kg < 0.25) kg = 0.25;
+  input.value = Math.round(kg * 100) / 100;
+}
+
 // ======================
-// PEDIDOS ACTIVOS
+// MESAS ABIERTAS
 // ======================
 async function cargarPedidosActivos() {
   const { data, error } = await supabaseClient
@@ -130,78 +192,125 @@ async function cargarPedidosActivos() {
     .select("*")
     .eq("tipo_pedido", "local")
     .eq("estado_local", "abierto")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: true });
 
   if (error) {
-    handleError(error);
+    handleError(error, "No se pudieron cargar las mesas. Revisa tu internet.");
     return;
   }
   pedidosActivos = data || [];
+
+  // Si la mesa elegida ya no está abierta (la cerraron en otro celular)
+  if (pedidoSeleccionadoId && !pedidosActivos.some(p => p.id === pedidoSeleccionadoId)) {
+    showToast("Esta mesa ya se cerró en otro celular.");
+    deseleccionarPedido();
+  }
+
+  // Mantener lo que aún no se termina de guardar
+  if (guardadoPendiente) {
+    const p = pedidosActivos.find(x => x.id === guardadoPendiente.id);
+    if (p) p.items = guardadoPendiente.items;
+  }
   renderListaPedidos();
 }
 
 function renderListaPedidos() {
-  if (!listaPedidosDiv) return;
-  if (pedidosActivos.length === 0) {
-    listaPedidosDiv.innerHTML = '<div class="empty-cart">No hay pedidos abiertos</div>';
-    return;
-  }
-  listaPedidosDiv.innerHTML = pedidosActivos.map(ped => {
-    const total = calcularTotalPedido(ped.items || []);
-    const activo = (pedidoSeleccionadoId === ped.id) ? 'activo' : '';
-    return `
-      <div class="pedido-resumen ${activo}" onclick="seleccionarPedido(${ped.id})">
-        <div>
-          <div class="pedido-mesa">📌 ${escapeHtml(ped.mesa || "Sin mesa")}</div>
-          <small>${new Date(ped.created_at).toLocaleTimeString('es-MX', { timeZone: ZONA_MX, hour: '2-digit', minute: '2-digit' })}</small>
-        </div>
-        <div class="pedido-total">$${total.toFixed(2)}</div>
-      </div>
-    `;
-  }).join("");
-}
+  const cont = $("listaPedidosActivos");
+  const n = pedidosActivos.length;
+  $("resumenMesas").textContent = n
+    ? `${n} ${n === 1 ? "mesa abierta" : "mesas abiertas"} · toca una para agregarle productos`
+    : "No hay mesas abiertas. Abre una para empezar.";
 
-function calcularTotalPedido(items) {
-  if (!items) return 0;
-  return items.reduce((sum, i) => sum + (Number(i.precio) * Number(i.qty)), 0);
+  const nueva = `
+    <button class="table-tile is-new" onclick="abrirModalNuevaMesa()">
+      <i class="fa-solid fa-plus"></i>
+      Abrir mesa
+    </button>`;
+
+  cont.innerHTML = nueva + pedidosActivos.map(ped => {
+    const items = ped.id === pedidoSeleccionadoId ? carritoActual : (ped.items || []);
+    const total = calcularTotalPedido(items);
+    const piezas = contarPiezas(items);
+    return `
+      <button class="table-tile ${ped.id === pedidoSeleccionadoId ? "is-active" : ""}" onclick="seleccionarPedido(${ped.id})">
+        <div>
+          <div class="t-name">${escapeHtml(ped.mesa || "Sin nombre")}</div>
+          <div class="t-meta">${piezas} ${piezas === 1 ? "producto" : "productos"} · ${hace(ped.created_at)}</div>
+        </div>
+        <div class="t-total">$${total.toFixed(2)}</div>
+      </button>`;
+  }).join("");
 }
 
 async function seleccionarPedido(id) {
   const pedido = pedidosActivos.find(p => p.id === id);
   if (!pedido) return;
+  await guardarPendiente();               // no perder cambios de la mesa anterior
   pedidoSeleccionadoId = id;
   carritoActual = pedido.items ? JSON.parse(JSON.stringify(pedido.items)) : [];
-  mesaActualSpan.innerText = pedido.mesa || "Sin mesa";
+  $("mesaActual").textContent = pedido.mesa || "Sin nombre";
+  $("barraMesa").textContent = pedido.mesa || "Sin nombre";
+  $("carritoMesa").textContent = pedido.mesa || "Sin nombre";
+  $("seccionProductos").hidden = false;
+  $("ayudaSinMesa").hidden = true;
+  $("barraPedido").hidden = false;
+  setEstadoGuardado("listo");
   renderCarritoActual();
   renderListaPedidos();
-  // En celular, al elegir un pedido saltar directo a los productos
-  if (esCelular()) {
-    document.getElementById("panelProductosMesero")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  $("seccionProductos").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function deseleccionarPedido() {
+  pedidoSeleccionadoId = null;
+  carritoActual = [];
+  $("seccionProductos").hidden = true;
+  $("ayudaSinMesa").hidden = false;
+  $("barraPedido").hidden = true;
+  cerrarHoja("modalCarrito");
+  cerrarHoja("modalCerrarPedido");
+  renderListaPedidos();
+}
+
+function irAMesas() {
+  $("seccionMesas").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ---------- Abrir mesa nueva ----------
+function abrirModalNuevaMesa() {
+  const ocupadas = new Set(pedidosActivos.map(p => (p.mesa || "").toLowerCase()));
+  $("mesasRapidas").innerHTML = MESAS_RAPIDAS.map(m => {
+    const ocupada = ocupadas.has(m.toLowerCase());
+    return `
+      <button class="btn ${ocupada ? "btn-outline is-disabled" : "btn-soft"}" ${ocupada ? "disabled" : ""}
+              onclick="crearNuevoPedido('${m}')">
+        <span>${m}${ocupada ? "<small>ocupada</small>" : ""}</span>
+      </button>`;
+  }).join("");
+  $("nombreMesaLibre").value = "";
+  abrirHoja("modalNuevaMesa");
+}
+
+function cerrarModalNuevaMesa() {
+  cerrarHoja("modalNuevaMesa");
+}
+
+function crearMesaDesdeTexto() {
+  const nombre = $("nombreMesaLibre").value.trim();
+  if (!nombre) {
+    showToast("Toca una mesa o escribe un nombre.");
+    return;
   }
+  crearNuevoPedido(nombre);
 }
 
-function esCelular() {
-  return window.matchMedia("(max-width: 900px)").matches;
-}
-
-function irAlCarritoMesero() {
-  document.getElementById("carritoMesero")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-// Mantiene al día la barra fija inferior (solo visible en celular)
-function actualizarBarraMovil(total) {
-  const barraMesa = document.getElementById("barraMesa");
-  const barraTotal = document.getElementById("barraTotal");
-  if (barraMesa) barraMesa.textContent = pedidoSeleccionadoId ? mesaActualSpan.innerText : "Ningún pedido";
-  if (barraTotal) barraTotal.textContent = total.toFixed(2);
-}
-
-async function crearNuevoPedido() {
-  const mesa = prompt("Identificador del pedido (ej. Mesa 3, Barra, Para llevar):");
-  if (!mesa) return;
+async function crearNuevoPedido(mesa) {
+  if (pedidosActivos.some(p => (p.mesa || "").toLowerCase() === mesa.toLowerCase())) {
+    showToast(`${mesa} ya está abierta.`);
+    return;
+  }
   const nuevoPedido = {
     tipo_pedido: "local",
-    mesa: mesa,
+    mesa,
     mesero_id: meseroId,
     estado_local: "abierto",
     items: [],
@@ -211,38 +320,37 @@ async function crearNuevoPedido() {
     direccion: "Local",
     metodo_pago: null
   };
-  const { data, error } = await supabaseClient
-    .from("pedidos")
-    .insert([nuevoPedido])
-    .select();
+  const { data, error } = await supabaseClient.from("pedidos").insert([nuevoPedido]).select();
   if (error) {
-    handleError(error);
+    handleError(error, "No se pudo abrir la mesa. Inténtalo de nuevo.");
     return;
   }
-  showToast("Pedido creado", "success");
+  cerrarModalNuevaMesa();
+  showToast(`${mesa} abierta`, "success");
   await cargarPedidosActivos();
   seleccionarPedido(data[0].id);
 }
 
 // ======================
-// CARRITO Y MODIFICACIONES
+// PEDIDO DE LA MESA
 // ======================
 function agregarAlPedidoActual(productoId) {
   if (!pedidoSeleccionadoId) {
-    showToast("Primero selecciona o crea un pedido");
+    showToast("Primero elige o abre una mesa.");
+    irAMesas();
     return;
   }
   const producto = productos.find(p => p.id === productoId);
   if (!producto) return;
+
   let cantidad = 1;
-  if (producto.tipo_venta === 'granel') {
-    const input = document.getElementById(`kg-${productoId}`);
-    if (input) cantidad = parseFloat(input.value) || 0.1;
+  if (producto.tipo_venta === "granel") {
+    cantidad = parseFloat($(`kg-${productoId}`)?.value) || 0.5;
+    if (cantidad <= 0) cantidad = 0.5;
   }
   const existente = carritoActual.find(item => item.id === productoId);
   if (existente) {
-    existente.qty += cantidad;
-    if (producto.tipo_venta === 'granel') existente.qty = Math.round(existente.qty * 100) / 100;
+    existente.qty = Math.round((Number(existente.qty) + cantidad) * 100) / 100;
   } else {
     carritoActual.push({
       id: producto.id,
@@ -252,332 +360,396 @@ function agregarAlPedidoActual(productoId) {
       qty: cantidad
     });
   }
-  renderCarritoActual();
-}
 
-function renderCarritoActual() {
-  if (!carritoDiv) return;
-  if (carritoActual.length === 0) {
-    carritoDiv.innerHTML = '<div class="empty-cart">Sin productos</div>';
-    totalSpan.innerText = "0.00";
-    actualizarBarraMovil(0);
-    return;
+  // Confirmación visual en el botón y en la barra
+  const btn = $(`add-${productoId}`);
+  if (btn) {
+    btn.classList.add("added");
+    btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+    setTimeout(() => {
+      btn.classList.remove("added");
+      btn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+    }, 700);
   }
-  let total = 0;
-  carritoDiv.innerHTML = carritoActual.map(item => {
-    const lineTotal = item.precio * item.qty;
-    total += lineTotal;
-    const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pz';
-    return `
-      <div class="cart-item">
-        <div>
-          <strong>${escapeHtml(item.nombre)}</strong><br>
-          ${Number(item.qty)} ${unidad} x $${Number(item.precio).toFixed(2)}
-          <div class="cart-item-price">$${lineTotal.toFixed(2)}</div>
-        </div>
-        <div class="qty-controls">
-          <button onclick="cambiarCantidad(${item.id}, -${item.tipo_venta === 'granel' ? 0.01 : 1})">-</button>
-          <span>${item.tipo_venta === 'granel' ? item.qty.toFixed(2) : item.qty}</span>
-          <button onclick="cambiarCantidad(${item.id}, ${item.tipo_venta === 'granel' ? 0.01 : 1})">+</button>
-          <button class="remove" onclick="eliminarItem(${item.id})">Quitar</button>
-        </div>
-      </div>
-    `;
-  }).join("");
-  totalSpan.innerText = total.toFixed(2);
-  actualizarBarraMovil(total);
+  const bar = $("barBtn");
+  bar.classList.remove("bump");
+  void bar.offsetWidth;
+  bar.classList.add("bump");
+
+  cambioEnCarrito();
 }
 
 function cambiarCantidad(id, delta) {
   const item = carritoActual.find(i => i.id === id);
   if (!item) return;
-  let nueva = item.qty + delta;
-  if (nueva <= 0) {
+  let nueva = Number(item.qty) + delta;
+  if (nueva <= 0.001) {
     carritoActual = carritoActual.filter(i => i.id !== id);
   } else {
-    if (item.tipo_venta === 'granel') nueva = Math.round(nueva * 100) / 100;
-    else nueva = Math.round(nueva);
-    item.qty = nueva;
+    item.qty = item.tipo_venta === "granel" ? Math.round(nueva * 100) / 100 : Math.round(nueva);
   }
-  renderCarritoActual();
+  cambioEnCarrito();
 }
 
 function eliminarItem(id) {
   carritoActual = carritoActual.filter(i => i.id !== id);
-  renderCarritoActual();
+  cambioEnCarrito();
 }
 
-async function guardarPedidoActual() {
-  if (!pedidoSeleccionadoId) return;
-  const total = carritoActual.reduce((sum, i) => sum + i.precio * i.qty, 0);
-  const { error } = await supabaseClient
-    .from("pedidos")
-    .update({ items: carritoActual, total: total })
-    .eq("id", pedidoSeleccionadoId);
-  if (error) {
-    handleError(error);
+function cambioEnCarrito() {
+  renderCarritoActual();
+  renderListaPedidos();
+  programarGuardado();
+}
+
+function renderCarritoActual() {
+  const cont = $("carritoActual");
+  const total = calcularTotalPedido(carritoActual);
+  const piezas = contarPiezas(carritoActual);
+
+  $("totalActual").textContent = total.toFixed(2);
+  $("totalCarritoSheet").textContent = total.toFixed(2);
+  $("barraCantidad").textContent = piezas;
+
+  if (!carritoActual.length) {
+    cont.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🧾</div>
+        <div class="empty-title">Esta mesa no tiene productos</div>
+        <p class="mt-8">Agrégalos con el botón <strong>+</strong> de cada platillo.</p>
+      </div>`;
     return;
   }
-  showToast("Pedido actualizado", "success");
-  await cargarPedidosActivos();
-  const index = pedidosActivos.findIndex(p => p.id === pedidoSeleccionadoId);
-  if (index !== -1) {
-    pedidosActivos[index].items = [...carritoActual];
-    pedidosActivos[index].total = total;
-  }
-  renderListaPedidos();
+
+  cont.innerHTML = carritoActual.map(item => {
+    const esGranel = item.tipo_venta === "granel";
+    const paso = esGranel ? 0.25 : 1;
+    const lineTotal = Number(item.precio) * Number(item.qty);
+    return `
+      <div class="cart-line">
+        <div class="cl-top">
+          <div>
+            <div class="cl-name">${escapeHtml(item.nombre)}</div>
+            <div class="cl-unit">$${Number(item.precio).toFixed(2)} ${esGranel ? "por kg" : "c/u"}</div>
+          </div>
+          <div class="cl-total">$${lineTotal.toFixed(2)}</div>
+        </div>
+        <div class="cl-bottom">
+          <div class="stepper">
+            <button type="button" onclick="cambiarCantidad(${item.id}, -${paso})" aria-label="Quitar uno">−</button>
+            <span class="stepper-value">${formatoCantidad(item)}</span>
+            <button type="button" onclick="cambiarCantidad(${item.id}, ${paso})" aria-label="Agregar uno">+</button>
+          </div>
+          <button class="btn btn-text danger" onclick="eliminarItem(${item.id})"><i class="fa-solid fa-trash-can"></i> Quitar</button>
+        </div>
+      </div>`;
+  }).join("");
 }
 
+function abrirCarritoMesero() {
+  renderCarritoActual();
+  abrirHoja("modalCarrito");
+}
+
+function cerrarCarritoMesero() {
+  cerrarHoja("modalCarrito");
+}
+
+// ---------- Guardado automático ----------
+function setEstadoGuardado(estado) {
+  const textos = {
+    listo: "Se guarda automáticamente",
+    guardando: "Guardando…",
+    guardado: "✓ Guardado",
+    error: "⚠ No se guardó. Revisa tu internet."
+  };
+  $("estadoGuardado").textContent = textos[estado];
+  $("estadoGuardadoSheet").textContent = textos[estado];
+}
+
+function programarGuardado() {
+  if (!pedidoSeleccionadoId) return;
+  guardadoPendiente = { id: pedidoSeleccionadoId, items: JSON.parse(JSON.stringify(carritoActual)) };
+  setEstadoGuardado("guardando");
+  clearTimeout(timerGuardado);
+  timerGuardado = setTimeout(guardarPendiente, 700);
+}
+
+async function guardarPendiente() {
+  clearTimeout(timerGuardado);
+  if (!guardadoPendiente) return true;
+  const { id, items } = guardadoPendiente;
+  guardadoPendiente = null;
+  const total = calcularTotalPedido(items);
+
+  const { error } = await supabaseClient
+    .from("pedidos")
+    .update({ items, total })
+    .eq("id", id);
+
+  if (error) {
+    // Volver a dejarlo pendiente para reintentar con el siguiente cambio
+    if (!guardadoPendiente) guardadoPendiente = { id, items };
+    setEstadoGuardado("error");
+    handleError(error, "No se pudo guardar el pedido. Revisa tu internet.");
+    return false;
+  }
+  const p = pedidosActivos.find(x => x.id === id);
+  if (p) { p.items = items; p.total = total; }
+  if (!guardadoPendiente && id === pedidoSeleccionadoId) setEstadoGuardado("guardado");
+  return true;
+}
+
+// Al salir de la app o bloquear el celular, guardar lo pendiente
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") guardarPendiente();
+});
+
 // ======================
-// IMPRESIÓN DE COMANDA
+// COMANDA PARA COCINA
 // ======================
 async function imprimirComanda() {
   if (!pedidoSeleccionadoId || carritoActual.length === 0) {
-    showToast("No hay productos en el pedido actual");
+    showToast("La mesa no tiene productos para la comanda.");
     return;
   }
+  await guardarPendiente();
   const pedido = pedidosActivos.find(p => p.id === pedidoSeleccionadoId);
-  const mesa = pedido?.mesa || "Sin mesa";
-  let comandaHtml = `
-    <div style="width: 80mm; font-family: monospace; padding: 10px;">
-      <h2>🍽️ COMANDA</h2>
-      <p><strong>Pedido:</strong> #${pedidoSeleccionadoId}</p>
-      <p><strong>Mesa:</strong> ${escapeHtml(mesa)}</p>
-      <hr>
-      <table style="width:100%">
-        <tr><th>Cant</th><th>Producto</th><th>Precio</th></tr>
-  `;
-  carritoActual.forEach(item => {
-    const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pz';
-    comandaHtml += `<tr><td>${escapeHtml(item.qty)} ${unidad}</td><td>${escapeHtml(item.nombre)}</td><td>$${item.precio.toFixed(2)}</td></tr>`;
-  });
-  comandaHtml += `</table><hr><p>Fecha: ${new Date().toLocaleString()}</p><p>¡Gracias!</p></div>`;
-  const ventana = window.open();
-  ventana.document.write(comandaHtml);
-  ventana.document.close();
-  ventana.print();
-  // Guardar en tabla comandas (opcional)
+  const mesa = pedido?.mesa || "Sin nombre";
+  const filas = carritoActual.map(item => `
+      <tr><td class="q">${escapeHtml(formatoCantidad(item))}</td><td>${escapeHtml(item.nombre)}</td></tr>`).join("");
+
+  abrirVentanaImpresion(`Comanda ${mesa}`, `
+    <h1>COMANDA</h1>
+    <p class="big">${escapeHtml(mesa)}</p>
+    <p>Pedido #${pedidoSeleccionadoId} · ${new Date().toLocaleString("es-MX", { timeZone: ZONA_MX, hour12: true })}</p>
+    <hr>
+    <table>${filas}</table>
+    <hr>`);
+
   await supabaseClient.from("comandas").insert([{
     pedido_id: pedidoSeleccionadoId,
     productos: carritoActual
   }]);
 }
 
+function abrirVentanaImpresion(titulo, cuerpo) {
+  const ventana = window.open("", "_blank");
+  if (!ventana) {
+    showToast("Tu navegador bloqueó la ventana de impresión. Permite las ventanas emergentes.");
+    return;
+  }
+  ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escapeHtml(titulo)}</title>
+    <style>
+      body { font-family: "Courier New", monospace; width: 72mm; margin: 0 auto; padding: 8px; color: #000; }
+      h1 { font-size: 18px; text-align: center; margin: 4px 0; }
+      .big { font-size: 22px; font-weight: bold; text-align: center; margin: 4px 0; }
+      p { margin: 2px 0; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      td { padding: 3px 0; vertical-align: top; }
+      td.q { width: 30%; font-weight: bold; }
+      td.r { text-align: right; white-space: nowrap; }
+      hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
+      .tot td { font-weight: bold; font-size: 16px; }
+      .center { text-align: center; }
+    </style></head><body>${cuerpo}
+    <script>window.onload = function () { window.print(); };<\/script>
+    </body></html>`);
+  ventana.document.close();
+}
+
 // ======================
-// CIERRE CON DESCUENTO Y COMISIÓN POR TARJETA
+// COBRAR (descuento y comisión por tarjeta)
 // ======================
-function abrirModalCierre() {
+function getMetodoCierre() {
+  return document.querySelector('input[name="metodoPagoCierre"]:checked')?.value || "Efectivo";
+}
+
+async function abrirModalCierre() {
   if (!pedidoSeleccionadoId) return;
+  if (!carritoActual.length) {
+    showToast("La mesa no tiene productos. Si no consumieron nada, usa \"Cancelar mesa\".");
+    return;
+  }
+  await guardarPendiente();
   const pedido = pedidosActivos.find(p => p.id === pedidoSeleccionadoId);
-  if (!pedido) return;
   const subtotal = calcularTotalPedido(carritoActual);
-  document.getElementById("cerrarMesa").innerText = pedido.mesa || "Sin mesa";
-  document.getElementById("cerrarSubtotal").innerText = subtotal.toFixed(2);
-  // Resetear descuentos y comisión
+  $("cerrarMesa").textContent = pedido?.mesa || "Sin nombre";
+  $("cerrarSubtotal").textContent = subtotal.toFixed(2);
+
   descuentoValor = 0;
   descuentoTipo = "monto";
   descuentoMonto = 0;
   comisionTarjeta = 0;
-  document.getElementById("descuentoValor").value = "";
-  document.getElementById("descuentoTipo").value = "monto";
-  document.getElementById("metodoPagoCierre").value = "Efectivo";
-  actualizarInfoDescuentoCierre(subtotal);
-  document.getElementById("modalCerrarPedido").style.display = "block";
+  $("descuentoValor").value = "";
+  $("descuentoTipo").value = "monto";
+  document.querySelector('input[name="metodoPagoCierre"][value="Efectivo"]').checked = true;
+  actualizarInfoDescuentoCierre();
+  cerrarHoja("modalCarrito");
+  abrirHoja("modalCerrarPedido");
 }
 
-function actualizarInfoDescuentoCierre(subtotal) {
+// Calcula descuento, comisión y total final; devuelve los montos
+function calcularCobro() {
+  const subtotal = calcularTotalPedido(carritoActual);
   let descuento = 0;
   if (descuentoValor > 0) {
-    if (descuentoTipo === "porcentaje") {
-      descuento = subtotal * (descuentoValor / 100);
-    } else {
-      descuento = descuentoValor;
-    }
+    descuento = descuentoTipo === "porcentaje" ? subtotal * (descuentoValor / 100) : descuentoValor;
     if (descuento > subtotal) descuento = subtotal;
   }
+  const conDescuento = subtotal - descuento;
+  const comision = getMetodoCierre() === "Tarjeta" ? conDescuento * 0.045 : 0;
+  const total = roundUpToHalf(conDescuento + comision);
+  return { subtotal, descuento, comision, total };
+}
+
+function actualizarInfoDescuentoCierre() {
+  const { descuento, comision, total } = calcularCobro();
   descuentoMonto = descuento;
-  let totalConDescuento = subtotal - descuento;
-  // Aplicar comisión si el método es Tarjeta
-  const metodo = document.getElementById("metodoPagoCierre").value;
-  let totalFinal = totalConDescuento;
-  if (metodo === "Tarjeta") {
-    comisionTarjeta = totalConDescuento * 0.045;
-    totalFinal = totalConDescuento + comisionTarjeta;
-  } else {
-    comisionTarjeta = 0;
-  }
-  totalFinal = roundUpToHalf(totalFinal);
-  document.getElementById("montoDescuento").innerText = descuento.toFixed(2);
-  document.getElementById("totalConDescuento").innerText = totalFinal.toFixed(2);
-  // Mostrar o esconder línea de comisión
-  let comisionHtml = document.getElementById("infoComision");
-  if (!comisionHtml) {
-    const container = document.getElementById("infoDescuentoCierre");
-    if (container) {
-      const div = document.createElement("div");
-      div.id = "infoComision";
-      div.style.marginTop = "8px";
-      container.appendChild(div);
-      comisionHtml = div;
-    }
-  }
-  if (comisionHtml) {
-    if (metodo === "Tarjeta" && comisionTarjeta > 0) {
-      comisionHtml.innerHTML = `<div>💳 Comisión 4.5%: +$${comisionTarjeta.toFixed(2)}</div>`;
-    } else {
-      comisionHtml.innerHTML = "";
-    }
-  }
+  comisionTarjeta = comision;
+  $("montoDescuento").textContent = descuento.toFixed(2);
+  $("montoComision").textContent = comision.toFixed(2);
+  $("infoComision").hidden = comision <= 0;
+  $("totalConDescuento").textContent = total.toFixed(2);
 }
 
 function aplicarDescuentoCierre() {
-  const subtotal = parseFloat(document.getElementById("cerrarSubtotal").innerText);
-  const valor = parseFloat(document.getElementById("descuentoValor").value);
-  const tipo = document.getElementById("descuentoTipo").value;
+  const valor = parseFloat($("descuentoValor").value);
   if (isNaN(valor) || valor <= 0) {
-    showToast("Ingresa un valor válido para el descuento");
+    showToast("Escribe una cantidad válida para el descuento.");
     return;
   }
   descuentoValor = valor;
-  descuentoTipo = tipo;
-  actualizarInfoDescuentoCierre(subtotal);
+  descuentoTipo = $("descuentoTipo").value;
+  actualizarInfoDescuentoCierre();
 }
 
 function quitarDescuentoCierre() {
-  const subtotal = parseFloat(document.getElementById("cerrarSubtotal").innerText);
   descuentoValor = 0;
-  document.getElementById("descuentoValor").value = "";
-  actualizarInfoDescuentoCierre(subtotal);
+  $("descuentoValor").value = "";
+  actualizarInfoDescuentoCierre();
 }
 
 function cerrarModalCierre() {
-  document.getElementById("modalCerrarPedido").style.display = "none";
+  cerrarHoja("modalCerrarPedido");
 }
 
 async function confirmarCierre() {
-  const metodo = document.getElementById("metodoPagoCierre").value;
-  const subtotal = calcularTotalPedido(carritoActual);
-  let totalConDescuento = subtotal - descuentoMonto;
-  let totalFinal = totalConDescuento;
-  let comision = 0;
-  if (metodo === "Tarjeta") {
-    comision = totalConDescuento * 0.045;
-    totalFinal = totalConDescuento + comision;
+  const btn = $("btnConfirmarCierre");
+  btn.disabled = true;
+  try {
+    clearTimeout(timerGuardado);
+    guardadoPendiente = null;   // el cierre guarda los productos finales
+    const metodo = getMetodoCierre();
+    const { subtotal, descuento, comision, total } = calcularCobro();
+    const pedido = pedidosActivos.find(p => p.id === pedidoSeleccionadoId);
+
+    const payload = {
+      estado_local: "cerrado",
+      fecha_cierre: new Date().toISOString(),
+      metodo_pago_local: metodo,
+      total,
+      items: carritoActual,
+      descuento_valor: descuentoValor,
+      descuento_tipo: descuentoTipo,
+      descuento_monto: descuento,
+      comision_tarjeta: comision
+    };
+
+    const { error } = await supabaseClient.from("pedidos").update(payload).eq("id", pedidoSeleccionadoId);
+    if (error) {
+      handleError(error, "No se pudo cerrar la mesa. Inténtalo de nuevo.");
+      return;
+    }
+
+    showToast(`${pedido?.mesa || "Mesa"} cobrada: $${total.toFixed(2)}`, "success");
+    imprimirTicketCliente(pedido?.mesa, carritoActual, subtotal, descuento, comision, total, metodo);
+    deseleccionarPedido();
+    await cargarPedidosActivos();
+    irAMesas();
+  } finally {
+    btn.disabled = false;
   }
-  totalFinal = roundUpToHalf(totalFinal);
+}
 
-  const payload = {
-    estado_local: "cerrado",
-    fecha_cierre: new Date().toISOString(),
-    metodo_pago_local: metodo,
-    total: totalFinal,
-    items: carritoActual,
-    descuento_valor: descuentoValor,
-    descuento_tipo: descuentoTipo,
-    descuento_monto: descuentoMonto,
-    comision_tarjeta: comision   // guardamos la comisión para el ticket
-  };
+function imprimirTicketCliente(mesa, items, subtotal, descuento, comision, total, metodo) {
+  const filas = items.map(i => `
+      <tr>
+        <td class="q">${escapeHtml(formatoCantidad(i))}</td>
+        <td>${escapeHtml(i.nombre)}</td>
+        <td class="r">$${(Number(i.precio) * Number(i.qty)).toFixed(2)}</td>
+      </tr>`).join("");
+  abrirVentanaImpresion("Ticket", `
+    <h1>🐟 FISH-MAR</h1>
+    <p class="center">Pescados y Mariscos</p>
+    <p class="center">${escapeHtml(mesa || "")} · ${new Date().toLocaleString("es-MX", { timeZone: ZONA_MX, hour12: true })}</p>
+    <hr>
+    <table>${filas}</table>
+    <hr>
+    <table>
+      <tr><td>Subtotal</td><td class="r">$${subtotal.toFixed(2)}</td></tr>
+      ${descuento > 0 ? `<tr><td>Descuento</td><td class="r">-$${descuento.toFixed(2)}</td></tr>` : ""}
+      ${comision > 0 ? `<tr><td>Comisión tarjeta 4.5%</td><td class="r">+$${comision.toFixed(2)}</td></tr>` : ""}
+      <tr class="tot"><td>TOTAL</td><td class="r">$${total.toFixed(2)}</td></tr>
+    </table>
+    <p>Pago: ${escapeHtml(metodo)}</p>
+    <hr>
+    <p class="center">¡Gracias por su visita!</p>`);
+}
 
+// ======================
+// CANCELAR MESA
+// ======================
+async function anularPedido() {
+  if (!pedidoSeleccionadoId) return;
+  const pedido = pedidosActivos.find(p => p.id === pedidoSeleccionadoId);
+  if (!confirm(`¿Cancelar ${pedido?.mesa || "esta mesa"}? Se borrarán sus productos y no se cobrará.`)) return;
+  clearTimeout(timerGuardado);
+  guardadoPendiente = null;
   const { error } = await supabaseClient
     .from("pedidos")
-    .update(payload)
+    .update({ estado_local: "anulado" })
     .eq("id", pedidoSeleccionadoId);
-
   if (error) {
-    handleError(error);
+    handleError(error, "No se pudo cancelar la mesa.");
     return;
   }
-
-  showToast("Pedido cerrado correctamente", "success");
-  cerrarModalCierre();
-  imprimirTicketCliente(pedidoSeleccionadoId, carritoActual, subtotal, descuentoMonto, comision, totalFinal, metodo);
+  showToast("Mesa cancelada", "success");
+  deseleccionarPedido();
   await cargarPedidosActivos();
-  pedidoSeleccionadoId = null;
-  carritoActual = [];
-  renderCarritoActual();
-  mesaActualSpan.innerText = "Ninguno";
-}
-
-function imprimirTicketCliente(pedidoId, items, subtotal, descuento, comision, total, metodo) {
-  let ticketHtml = `
-    <div style="width: 80mm; font-family: monospace; padding: 10px;">
-      <h2>🐟 Fish-Mar</h2>
-      <p>Gracias por su visita</p>
-      <hr>
-      <table style="width:100%">
-        <tr><th>Cant</th><th>Producto</th><th>Importe</th></tr>
-        ${items.map(i => `<tr><td>${escapeHtml(i.qty)} ${i.tipo_venta==='granel'?'kg':'pz'}</td><td>${escapeHtml(i.nombre)}</td><td>$${(i.precio*i.qty).toFixed(2)}</td></tr>`).join('')}
-      </table>
-      <hr>
-      <p>Subtotal: $${subtotal.toFixed(2)}</p>
-      ${descuento > 0 ? `<p>Descuento: -$${descuento.toFixed(2)}</p>` : ''}
-      ${comision > 0 ? `<p>Comisión tarjeta (4.5%): +$${comision.toFixed(2)}</p>` : ''}
-      <p><strong>Total: $${total.toFixed(2)}</strong></p>
-      <p>Pago: ${escapeHtml(metodo)}</p>
-      <p>¡Vuelva pronto!</p>
-    </div>
-  `;
-  const ventana = window.open();
-  ventana.document.write(ticketHtml);
-  ventana.document.close();
-  ventana.print();
-}
-
-function anularPedido() {
-  if (!pedidoSeleccionadoId) return;
-  if (!confirm("¿Anular este pedido? Se perderán los productos.")) return;
-  supabaseClient
-    .from("pedidos")
-    .update({ estado_local: "anulado" })
-    .eq("id", pedidoSeleccionadoId)
-    .then(() => {
-      showToast("Pedido anulado", "success");
-      cargarPedidosActivos();
-      pedidoSeleccionadoId = null;
-      carritoActual = [];
-      renderCarritoActual();
-      mesaActualSpan.innerText = "Ninguno";
-    });
-}
-
-function logout() {
-  supabaseClient.auth.signOut();
-  window.location.href = "admin.html";
+  irAMesas();
 }
 
 // ======================
-// BÚSQUEDA Y CONFIGURACIÓN
+// EVENTOS
 // ======================
-if (buscadorInput) {
-  buscadorInput.addEventListener("input", (e) => {
-    textoBusqueda = e.target.value;
-    renderProductosMesero();
-  });
-}
-
-// Escuchar cambio de método de pago en el modal
-document.addEventListener("DOMContentLoaded", () => {
-  const metodoSelect = document.getElementById("metodoPagoCierre");
-  if (metodoSelect) {
-    metodoSelect.addEventListener("change", () => {
-      const subtotal = parseFloat(document.getElementById("cerrarSubtotal").innerText);
-      actualizarInfoDescuentoCierre(subtotal);
-    });
-  }
+$("buscadorProductos").addEventListener("input", (e) => {
+  textoBusqueda = e.target.value;
+  renderProductosMesero();
 });
 
+document.querySelectorAll('input[name="metodoPagoCierre"]').forEach(r =>
+  r.addEventListener("change", actualizarInfoDescuentoCierre)
+);
+
 // ======================
-// INICIALIZACIÓN
+// INICIO
 // ======================
 (async function init() {
   const ok = await verificarSesionMesero();
   if (!ok) return;
-  await cargarProductosMesero();
-  await cargarPedidosActivos();
-  // Suscripción en tiempo real
-  supabaseClient.channel('pedidos-local')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: 'tipo_pedido=eq.local' }, () => {
+  renderListaPedidos();
+  await Promise.all([cargarProductosMesero(), cargarPedidosActivos()]);
+
+  // Tiempo real: si otro mesero abre o cierra mesas
+  supabaseClient.channel("pedidos-local")
+    .on("postgres_changes", { event: "*", schema: "public", table: "pedidos", filter: "tipo_pedido=eq.local" }, () => {
       cargarPedidosActivos();
     })
     .subscribe();
+
+  // Actualizar los "hace X min" de las mesas
+  setInterval(renderListaPedidos, 60000);
 })();

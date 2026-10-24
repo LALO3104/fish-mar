@@ -1,22 +1,23 @@
-// js/repartidor.js
+// js/repartidor.js — entregas a domicilio
+// Dependencias: supabaseClient (supabase.js), utils.js
 
 let pedidosRepartidor = [];
 let userIdActual = null;
 let nombreRepartidor = "";
-let fechaFiltro = "";   // Fecha seleccionada en formato YYYY-MM-DD
+let modoFiltro = "pendientes";   // "pendientes" | "hoy" | "fecha"
+let saldoHoy = 0;
+
+const $ = (id) => document.getElementById(id);
 
 // ======================
-// VERIFICACIÓN DE SESIÓN
+// SESIÓN
 // ======================
 async function verificarSesion() {
   const { data, error } = await supabaseClient.auth.getUser();
-
   if (error || !data?.user) {
-    showToast("No hay sesión activa. Redirigiendo al login.");
     window.location.href = "admin.html";
     return false;
   }
-
   userIdActual = data.user.id;
 
   const { data: rolData, error: rolError } = await supabaseClient
@@ -26,249 +27,291 @@ async function verificarSesion() {
     .single();
 
   if (rolError || !rolData || rolData.role !== "repartidor") {
-    handleError(rolError, "Tu usuario no tiene rol de repartidor.");
+    showToast("Esta pantalla es solo para repartidores.");
     window.location.href = "admin.html";
     return false;
   }
 
   nombreRepartidor = rolData.full_name || "Repartidor";
-  const titulo = document.querySelector(".header h1");
-  const subtitulo = document.querySelector(".header p");
-
-  if (titulo) titulo.textContent = `🐟 ${nombreRepartidor}`;
-  if (subtitulo) subtitulo.textContent = "Solo tus pedidos asignados";
-
+  $("nombreRepartidor").textContent = `Hola, ${nombreRepartidor}`;
   return true;
 }
 
+function logout() {
+  supabaseClient.auth.signOut();
+  window.location.href = "admin.html";
+}
+
 // ======================
-// PEDIDOS Y FILTROS
+// PEDIDOS
 // ======================
 async function cargarPedidosRepartidor() {
-  const ok = await verificarSesion();
-  if (!ok) return;
-
-  const fechaInput = document.getElementById("filtroFechaRepartidor");
-  fechaFiltro = fechaInput ? fechaInput.value : "";
+  if (!userIdActual) return;
 
   let query = supabaseClient
     .from("pedidos")
     .select("*")
     .eq("repartidor_id", userIdActual)
-    .neq('tipo_pedido', 'local')
-    .order("created_at", { ascending: false });
+    .neq("tipo_pedido", "local");
 
-  if (fechaFiltro) {
-    const rango = rangoDiaMX(fechaFiltro);
-    query = query.gte("created_at", rango.desde).lt("created_at", rango.hasta);
+  if (modoFiltro === "pendientes") {
+    query = query.neq("estado", "Entregado").order("created_at", { ascending: true });
+  } else {
+    const dia = modoFiltro === "hoy" ? getHoy() : $("filtroFechaRepartidor").value;
+    if (!dia) {
+      pedidosRepartidor = [];
+      renderPedidosRepartidor();
+      return;
+    }
+    const rango = rangoDiaMX(dia);
+    query = query.gte("created_at", rango.desde).lt("created_at", rango.hasta)
+      .order("created_at", { ascending: false });
   }
 
   const { data, error } = await query;
-
   if (error) {
-    handleError(error, "Error al cargar tus pedidos.");
+    handleError(error, "No se pudieron cargar tus pedidos. Revisa tu internet.");
     return;
   }
-
   pedidosRepartidor = data || [];
   renderPedidosRepartidor();
-  actualizarStatsRepartidor();
-  await actualizarResumenEfectivo();
+  actualizarConteoPendientes();
+}
+
+async function actualizarConteoPendientes() {
+  if (modoFiltro === "pendientes") {
+    $("countPendientes").textContent = pedidosRepartidor.length;
+    return;
+  }
+  const { count } = await supabaseClient
+    .from("pedidos")
+    .select("id", { count: "exact", head: true })
+    .eq("repartidor_id", userIdActual)
+    .neq("tipo_pedido", "local")
+    .neq("estado", "Entregado");
+  $("countPendientes").textContent = count ?? 0;
 }
 
 function renderPedidosRepartidor() {
-  const cont = document.getElementById("misPedidos");
-  if (!cont) return;
+  const cont = $("misPedidos");
+  const n = pedidosRepartidor.length;
+  const textos = {
+    pendientes: n ? `Tienes ${n} ${n === 1 ? "pedido" : "pedidos"} por entregar` : "No tienes pedidos por entregar",
+    hoy: `${n} ${n === 1 ? "pedido" : "pedidos"} hoy`,
+    fecha: `${n} ${n === 1 ? "pedido" : "pedidos"} ese día`
+  };
+  $("resumenPedidos").textContent = textos[modoFiltro];
 
-  if (!pedidosRepartidor.length) {
-    cont.innerHTML = `<div class="panel">No tienes pedidos asignados para este filtro.</div>`;
+  if (!n) {
+    cont.innerHTML = modoFiltro === "pendientes"
+      ? `<div class="empty"><div class="empty-icon">🎉</div><div class="empty-title">¡Todo entregado!</div>
+         <p class="mt-8">Cuando te asignen un pedido aparecerá aquí.</p></div>`
+      : `<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">No hay pedidos</div>
+         <p class="mt-8">No tuviste pedidos en ese día.</p></div>`;
     return;
   }
 
   cont.innerHTML = pedidosRepartidor.map(p => {
-    const estadoClass = getEstadoClass(p.estado, p.created_at || p.fecha);
-    const fechaLocal = formatearFechaPedido(p);
-    const tiempo = calcularTiempoPedido(p);
-    const mapa = safeUrl(p.ubicacion);
-    const pedidoNumero = escapeHtml(p.numero_pedido || `#${p.id}`);
+    const info = estadoInfo(p.estado);
+    const clases = getEstadoClass(p.estado, p.created_at || p.fecha);
+    const numero = escapeHtml(p.numero_pedido || `#${p.id}`);
+    const items = Array.isArray(p.items) ? p.items : [];
+    const esEfectivo = p.metodo_pago === "Efectivo";
+    const telefono = escapeHtml(p.telefono);
 
-    const itemsHtml = Array.isArray(p.items) && p.items.length
-      ? p.items.map(item => `
-          <li>${escapeHtml(item.nombre)} x${escapeHtml(item.qty)} — $${(Number(item.precio) * Number(item.qty)).toFixed(2)}</li>
-        `).join("")
+    const itemsHtml = items.length
+      ? items.map(item => `
+          <li><span><span class="qty">${escapeHtml(item.tipo_venta === "granel" ? `${Number(item.qty).toFixed(2)} kg` : `${Number(item.qty)}×`)}</span>${escapeHtml(item.nombre)}</span>
+          <span>$${(Number(item.precio) * Number(item.qty)).toFixed(2)}</span></li>`).join("")
       : `<li>Sin detalle de productos</li>`;
 
+    let accion;
+    if (p.estado === "Entregado") {
+      accion = `<div class="done-line"><i class="fa-solid fa-circle-check"></i> Entregado</div>`;
+    } else if (p.estado === "El repartidor está en camino") {
+      accion = `<button class="btn btn-primary btn-lg btn-block" onclick="marcarEntregado(${p.id})">
+                  <i class="fa-solid fa-circle-check"></i> Ya lo entregué</button>`;
+    } else {
+      accion = `<button class="btn btn-dark btn-lg btn-block" onclick="cambiarEstado(${p.id}, 'El repartidor está en camino')">
+                  <i class="fa-solid fa-motorcycle"></i> Salir a entregar</button>`;
+    }
+
+    const opciones = ESTADOS_PEDIDO.map(e =>
+      `<option value="${escapeHtml(e.valor)}" ${e.valor === p.estado ? "selected" : ""}>${e.etiqueta}</option>`).join("");
+
     return `
-      <div class="pedido-card ${estadoClass}">
-        <div class="pedido-top">
-          <div>
-            <h3>${escapeHtml(p.nombre)}</h3>
-            <a class="pedido-phone" href="tel:${escapeHtml(p.telefono)}">📞 ${escapeHtml(p.telefono)}</a>
-            <p class="pedido-time">🧾 Pedido: <strong>${pedidoNumero}</strong></p>
-            <p class="pedido-time">🕒 ${escapeHtml(fechaLocal)}</p>
-            <p class="pedido-time">⏱️ ${tiempo}</p>
+      <article class="order ${clases}">
+        <div class="order-head">
+          <div class="grow">
+            <div class="order-name">${escapeHtml(p.nombre)}</div>
+            <div class="order-meta">Pedido ${numero} · ${escapeHtml(horaMX(p.created_at))}</div>
+            ${p.estado !== "Entregado" ? `<div class="order-wait"><i class="fa-regular fa-clock"></i> ${escapeHtml(calcularTiempoPedido(p))}</div>` : ""}
           </div>
-          <span class="estado-badge ${estadoClass}">${escapeHtml(p.estado)}</span>
+          <span class="badge ${info.clase}">${info.etiqueta}</span>
         </div>
-        <div class="pedido-body">
-          <p>📍 ${escapeHtml(p.direccion)}</p>
-          <p>💳 ${escapeHtml(p.metodo_pago)}</p>
-          <p>💰 <strong>$${Number(p.total).toFixed(2)}</strong></p>
-          <p>📝 ${escapeHtml(p.notas || "Sin notas")}</p>
-          <div class="pedido-items">
-            <strong>Productos:</strong>
-            <ul>${itemsHtml}</ul>
+        <div class="order-body">
+          <div class="info"><i class="fa-solid fa-location-dot"></i><span>${escapeHtml(p.direccion)}</span></div>
+          <div class="btn-grid">
+            <a class="btn btn-outline" href="${safeUrl(p.ubicacion)}" target="_blank" rel="noopener">
+              <i class="fa-solid fa-map-location-dot"></i> Cómo llegar</a>
+            <a class="btn btn-outline" href="tel:${telefono}"><i class="fa-solid fa-phone"></i> Llamar</a>
           </div>
+          <div class="total-line ${esEfectivo ? "pay-cash" : ""}">
+            <span class="muted strong">${esEfectivo ? "Cobrar en efectivo" : "Pago con " + escapeHtml(p.metodo_pago || "—")}</span>
+            <span class="amount">${formatoDinero(p.total)}</span>
+          </div>
+          ${p.notas ? `<div class="note"><i class="fa-solid fa-note-sticky"></i><span>${escapeHtml(p.notas)}</span></div>` : ""}
+          <details class="more">
+            <summary>Ver productos (${items.length})</summary>
+            <ul class="items">${itemsHtml}</ul>
+          </details>
+          ${accion}
+          <details class="more">
+            <summary class="small muted">¿Te equivocaste? Corregir estado</summary>
+            <select class="select" onchange="cambiarEstado(${p.id}, this.value)">${opciones}</select>
+          </details>
         </div>
-        <div class="pedido-actions">
-          <select onchange="cambiarEstado(${p.id}, this.value)">
-            <option ${p.estado === "Recibido" ? "selected" : ""}>Recibido</option>
-            <option ${p.estado === "En proceso" ? "selected" : ""}>En proceso</option>
-            <option ${p.estado === "El repartidor está en camino" ? "selected" : ""}>El repartidor está en camino</option>
-            <option ${p.estado === "Entregado" ? "selected" : ""}>Entregado</option>
-          </select>
-          <a href="${mapa}" target="_blank" class="map-btn">Mapa</a>
-        </div>
-      </div>
-    `;
+      </article>`;
   }).join("");
 }
 
 async function cambiarEstado(id, nuevoEstado) {
-  const { error } = await supabaseClient
-    .from("pedidos")
-    .update({ estado: nuevoEstado })
-    .eq("id", id);
-
+  const { error } = await supabaseClient.from("pedidos").update({ estado: nuevoEstado }).eq("id", id);
   if (error) {
-    handleError(error, "No se pudo actualizar el pedido.");
+    handleError(error, "No se pudo actualizar el pedido. Inténtalo de nuevo.");
     return;
   }
-
-  showToast("Estado actualizado correctamente", "success");
+  showToast(nuevoEstado === "Entregado" ? "¡Pedido entregado!" : `Listo: ${estadoInfo(nuevoEstado).etiqueta}`, "success");
   await cargarPedidosRepartidor();
+  await actualizarResumenEfectivo();
 }
 
-function actualizarStatsRepartidor() {
-  const asignados = pedidosRepartidor.length;
-  const enCamino = pedidosRepartidor.filter(p => p.estado === "El repartidor está en camino").length;
-  const entregados = pedidosRepartidor.filter(p => p.estado === "Entregado").length;
-
-  document.getElementById("statAsignados").textContent = asignados;
-  document.getElementById("statCamino").textContent = enCamino;
-  document.getElementById("statEntregadosR").textContent = entregados;
+function marcarEntregado(id) {
+  const p = pedidosRepartidor.find(x => x.id === id);
+  if (!p) return;
+  const cobro = p.metodo_pago === "Efectivo" ? `\n\nRecuerda cobrar ${formatoDinero(p.total)} en efectivo.` : "";
+  if (!confirm(`¿Ya entregaste el pedido de ${p.nombre}?${cobro}`)) return;
+  cambiarEstado(id, "Entregado");
 }
 
-// ======================
-// RECAUDACIÓN Y CORTES
-// ======================
-async function obtenerTotalesRecaudacionPorFecha() {
-  const pedidosEfectivoEntregados = pedidosRepartidor.filter(p => 
-    p.metodo_pago === "Efectivo" && p.estado === "Entregado"
-  );
-  const totalRecaudado = pedidosEfectivoEntregados.reduce((sum, p) => sum + Number(p.total), 0);
-
-  let totalEntregado = 0;
-  if (userIdActual) {
-    let query = supabaseClient
-      .from("repartidor_cortes")
-      .select("monto")
-      .eq("repartidor_id", userIdActual);
-
-    if (fechaFiltro) {
-      const rango = rangoDiaMX(fechaFiltro);
-      query = query.gte("fecha_corte", rango.desde).lt("fecha_corte", rango.hasta);
-    }
-
-    const { data: cortes, error } = await query;
-    if (!error && cortes) {
-      totalEntregado = cortes.reduce((sum, c) => sum + Number(c.monto), 0);
-    }
+function cambiarFiltro(modo) {
+  modoFiltro = modo;
+  document.querySelectorAll("#filtrosRepartidor .chip").forEach(c =>
+    c.classList.toggle("is-active", c.dataset.modo === modo));
+  $("campoFecha").hidden = modo !== "fecha";
+  if (modo === "fecha" && !$("filtroFechaRepartidor").value) {
+    $("filtroFechaRepartidor").value = sumarDias(getHoy(), -1);
   }
+  cargarPedidosRepartidor();
+}
 
-  const saldo = totalRecaudado - totalEntregado;
-  return { totalRecaudado, totalEntregado, saldo };
+// ======================
+// DINERO DEL DÍA
+// ======================
+async function obtenerTotalesHoy() {
+  const rango = rangoDiaMX(getHoy());
+
+  const [{ data: pedidosHoy }, { data: cortes }] = await Promise.all([
+    supabaseClient.from("pedidos").select("total, metodo_pago, estado")
+      .eq("repartidor_id", userIdActual).neq("tipo_pedido", "local")
+      .gte("created_at", rango.desde).lt("created_at", rango.hasta),
+    supabaseClient.from("repartidor_cortes").select("monto")
+      .eq("repartidor_id", userIdActual)
+      .gte("fecha_corte", rango.desde).lt("fecha_corte", rango.hasta)
+  ]);
+
+  const totalRecaudado = (pedidosHoy || [])
+    .filter(p => p.metodo_pago === "Efectivo" && p.estado === "Entregado")
+    .reduce((sum, p) => sum + Number(p.total), 0);
+  const totalEntregado = (cortes || []).reduce((sum, c) => sum + Number(c.monto), 0);
+  return { totalRecaudado, totalEntregado, saldo: totalRecaudado - totalEntregado };
 }
 
 async function actualizarResumenEfectivo() {
   if (!userIdActual) return;
   try {
-    const { totalRecaudado, totalEntregado, saldo } = await obtenerTotalesRecaudacionPorFecha();
-    document.getElementById("totalRecaudado").textContent = `$${totalRecaudado.toFixed(2)}`;
-    document.getElementById("totalEntregado").textContent = `$${totalEntregado.toFixed(2)}`;
-    document.getElementById("saldoPendiente").textContent = `$${saldo.toFixed(2)}`;
+    const { totalRecaudado, totalEntregado, saldo } = await obtenerTotalesHoy();
+    saldoHoy = Math.max(saldo, 0);
+    $("totalRecaudado").textContent = formatoDinero(totalRecaudado);
+    $("totalEntregado").textContent = formatoDinero(totalEntregado);
+    $("saldoPendiente").textContent = formatoDinero(saldoHoy);
+    $("saldoModal").textContent = formatoDinero(saldoHoy);
   } catch (err) {
     console.error("Error actualizando resumen:", err);
   }
 }
 
 function abrirModalEntrega() {
-  document.getElementById("modalEntrega").style.display = "block";
-  document.body.style.overflow = "hidden";
+  $("saldoModal").textContent = formatoDinero(saldoHoy);
+  $("modalEntrega").style.display = "block";
+  document.body.classList.add("no-scroll");
 }
 
 function cerrarModalEntrega() {
-  document.getElementById("modalEntrega").style.display = "none";
-  document.body.style.overflow = "auto";
-  document.getElementById("entregaMonto").value = "";
-  document.getElementById("entregaNotas").value = "";
+  $("modalEntrega").style.display = "none";
+  document.body.classList.remove("no-scroll");
+  $("entregaMonto").value = "";
+  $("entregaNotas").value = "";
+}
+
+function entregarTodo() {
+  if (saldoHoy <= 0) {
+    showToast("Hoy no tienes dinero pendiente por entregar.");
+    return;
+  }
+  $("entregaMonto").value = saldoHoy.toFixed(2);
 }
 
 async function registrarEntrega() {
-  const montoInput = document.getElementById("entregaMonto");
-  const notasInput = document.getElementById("entregaNotas");
-  let monto = parseFloat(montoInput.value);
-  const notas = notasInput.value.trim();
+  const monto = parseFloat($("entregaMonto").value);
+  const notas = $("entregaNotas").value.trim();
 
   if (isNaN(monto) || monto <= 0) {
-    showToast("Ingresa un monto válido mayor a 0.");
+    showToast("Escribe cuánto dinero vas a entregar.");
     return;
   }
 
-  const { saldo } = await obtenerTotalesRecaudacionPorFecha();
-  if (monto > saldo) {
-    showToast(`No puedes entregar más de $${saldo.toFixed(2)} (saldo actual para este período).`);
-    return;
+  const btn = $("btnRegistrarEntrega");
+  btn.disabled = true;
+  try {
+    const { saldo } = await obtenerTotalesHoy();
+    if (monto > saldo + 0.001) {
+      showToast(`Solo debes ${formatoDinero(Math.max(saldo, 0))} hoy. Revisa la cantidad.`);
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from("repartidor_cortes")
+      .insert([{ repartidor_id: userIdActual, monto, notas: notas || null }]);
+
+    if (error) {
+      handleError(error, "No se pudo registrar la entrega. Inténtalo de nuevo.");
+      return;
+    }
+
+    showToast(`Entrega de ${formatoDinero(monto)} registrada`, "success");
+    cerrarModalEntrega();
+    await actualizarResumenEfectivo();
+    await cargarHistorialEntregas();
+  } finally {
+    btn.disabled = false;
   }
-
-  const { error } = await supabaseClient
-    .from("repartidor_cortes")
-    .insert([{
-      repartidor_id: userIdActual,
-      monto: monto,
-      notas: notas || null
-    }]);
-
-  if (error) {
-    handleError(error, "Error al registrar la entrega.");
-    return;
-  }
-
-  showToast(`Entrega de $${monto.toFixed(2)} registrada correctamente.`, "success");
-  cerrarModalEntrega();
-  await actualizarResumenEfectivo();
-  await cargarHistorialEntregas();
 }
 
 // ======================
-// HISTORIAL DE ENTREGAS (con filtro y eliminación)
+// HISTORIAL DE ENTREGAS
 // ======================
 async function limpiarRegistrosAntiguos() {
   const fechaLimite = new Date();
   fechaLimite.setDate(fechaLimite.getDate() - 8);
-  const fechaLimiteStr = fechaLimite.toISOString();
 
   const { error } = await supabaseClient
     .from("repartidor_cortes")
     .delete()
-    .lt("fecha_corte", fechaLimiteStr)
+    .lt("fecha_corte", fechaLimite.toISOString())
     .eq("repartidor_id", userIdActual);
 
-  if (error) {
-    console.error("Error al limpiar registros antiguos:", error);
-  } else {
-    console.log("Registros antiguos eliminados (más de 8 días)");
-  }
+  if (error) console.error("Error al limpiar registros antiguos:", error);
 }
 
 async function cargarHistorialEntregas() {
@@ -282,109 +325,82 @@ async function cargarHistorialEntregas() {
     .eq("repartidor_id", userIdActual)
     .order("fecha_corte", { ascending: false });
 
-  const fechaInicio = document.getElementById("historialFechaInicio")?.value;
-  const fechaFin = document.getElementById("historialFechaFin")?.value;
-
-  if (fechaInicio) {
-    query = query.gte("fecha_corte", rangoDiaMX(fechaInicio).desde);
-  }
-  if (fechaFin) {
-    query = query.lt("fecha_corte", rangoDiaMX(fechaFin).hasta);
-  }
+  const fechaInicio = $("historialFechaInicio").value;
+  const fechaFin = $("historialFechaFin").value;
+  if (fechaInicio) query = query.gte("fecha_corte", rangoDiaMX(fechaInicio).desde);
+  if (fechaFin) query = query.lt("fecha_corte", rangoDiaMX(fechaFin).hasta);
 
   const { data, error } = await query;
   if (error) {
-    handleError(error, "Error al cargar historial de entregas.");
+    handleError(error, "No se pudo cargar el historial.");
     return;
   }
 
-  const contenedor = document.getElementById("historialEntregas");
-  if (!contenedor) return;
-
-  if (!data || data.length === 0) {
-    contenedor.innerHTML = `<div class="panel">No hay registros de entregas en este período.</div>`;
+  const cont = $("historialEntregas");
+  if (!data || !data.length) {
+    cont.innerHTML = `<div class="empty-cart">No hay entregas registradas en esas fechas.</div>`;
     return;
   }
 
-  contenedor.innerHTML = data.map(corte => {
-    const fecha = new Date(corte.fecha_corte).toLocaleString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      hour12: true
-    });
-    return `
-      <div class="admin-item">
-        <div>
-          <strong>💰 $${Number(corte.monto).toFixed(2)}</strong>
-          <p>📅 ${fecha}</p>
-          ${corte.notas ? `<p><small>📝 ${escapeHtml(corte.notas)}</small></p>` : ''}
-        </div>
-        <div class="admin-actions">
-          <button class="delete-btn" onclick="eliminarRegistroEntrega(${corte.id})">🗑️ Eliminar</button>
-        </div>
+  cont.innerHTML = data.map(corte => `
+    <div class="list-item">
+      <div class="grow">
+        <div class="title">${formatoDinero(corte.monto)}</div>
+        <div class="small muted">${escapeHtml(fechaHoraCortaMX(corte.fecha_corte))}</div>
+        ${corte.notas ? `<div class="small">${escapeHtml(corte.notas)}</div>` : ""}
       </div>
-    `;
-  }).join("");
+      <button class="btn btn-text danger" onclick="eliminarRegistroEntrega(${corte.id})" aria-label="Borrar">
+        <i class="fa-solid fa-trash-can"></i>
+      </button>
+    </div>`).join("");
 }
 
-// Nueva función para eliminar un registro de entrega
 async function eliminarRegistroEntrega(id) {
-  if (!confirm("¿Estás seguro de eliminar este registro de entrega? Esta acción no se puede deshacer.")) return;
+  if (!confirm("¿Borrar este registro de entrega? No se puede deshacer.")) return;
 
   const { error } = await supabaseClient
     .from("repartidor_cortes")
     .delete()
     .eq("id", id)
-    .eq("repartidor_id", userIdActual); // seguridad extra
+    .eq("repartidor_id", userIdActual);
 
   if (error) {
-    handleError(error, "Error al eliminar el registro.");
+    handleError(error, "No se pudo borrar el registro.");
     return;
   }
-
-  showToast("Registro eliminado correctamente.", "success");
-  // Recargar el historial (respeta filtros actuales)
+  showToast("Registro borrado", "success");
   await cargarHistorialEntregas();
-  // Actualizar el resumen de recaudación porque cambió el total entregado
   await actualizarResumenEfectivo();
 }
 
 function limpiarFiltroHistorial() {
-  document.getElementById("historialFechaInicio").value = "";
-  document.getElementById("historialFechaFin").value = "";
+  $("historialFechaInicio").value = "";
+  $("historialFechaFin").value = "";
   cargarHistorialEntregas();
 }
 
 // ======================
-// UTILIDADES PARA FILTROS DE PEDIDOS
+// EVENTOS E INICIO
 // ======================
-function ponerHoyRepartidor() {
-  const hoy = getHoy();
-  const filtro = document.getElementById("filtroFechaRepartidor");
-  if (filtro) filtro.value = hoy;
-  cargarPedidosRepartidor();
-}
-
-function limpiarFiltroRepartidor() {
-  const filtro = document.getElementById("filtroFechaRepartidor");
-  if (filtro) filtro.value = "";
-  cargarPedidosRepartidor();
-}
-
-function logout() {
-  supabaseClient.auth.signOut();
-  window.location.href = "admin.html";
-}
-
-// ======================
-// INICIALIZACIÓN Y AUTOACTUALIZACIÓN
-// ======================
-setInterval(() => {
-  cargarPedidosRepartidor();
-}, 10000);
+document.querySelectorAll("#filtrosRepartidor .chip").forEach(chip =>
+  chip.addEventListener("click", () => cambiarFiltro(chip.dataset.modo)));
+$("filtroFechaRepartidor").addEventListener("change", cargarPedidosRepartidor);
 
 (async function init() {
   const ok = await verificarSesion();
   if (!ok) return;
-  await cargarPedidosRepartidor();
-  await cargarHistorialEntregas();
+  await Promise.all([cargarPedidosRepartidor(), actualizarResumenEfectivo(), cargarHistorialEntregas()]);
+
+  // Avisar al momento cuando le asignan o cambian un pedido
+  supabaseClient.channel("pedidos-repartidor")
+    .on("postgres_changes",
+      { event: "*", schema: "public", table: "pedidos", filter: `repartidor_id=eq.${userIdActual}` },
+      () => { cargarPedidosRepartidor(); actualizarResumenEfectivo(); })
+    .subscribe();
+
+  // Respaldo por si se pierde la conexión en tiempo real
+  setInterval(() => {
+    cargarPedidosRepartidor();
+    actualizarResumenEfectivo();
+  }, 30000);
 })();

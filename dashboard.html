@@ -2,788 +2,388 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FishMar | Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d2a38" />
+  <title>FishMar | Administración</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link rel="stylesheet" href="css/styles.css" />
-  <style>
-    /* Estilos base */
-    body {
-      background: linear-gradient(135deg, #e0f2fe 0%, #cfe9ff 100%);
-      position: relative;
-    }
-    body::before {
-      content: "";
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 120'%3E%3Cpath fill='%230ea5a4' fill-opacity='0.05' d='M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z' opacity='.25'%3E%3C/path%3E%3C/svg%3E");
-      background-repeat: repeat-x;
-      background-position: bottom;
-      opacity: 0.3;
-      pointer-events: none;
-      z-index: 0;
-    }
-    .container {
-      position: relative;
-      z-index: 1;
-    }
-    .header {
-      background: linear-gradient(135deg, #0ea5a4, #0b7f7e);
-      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-    }
-    .stat-card {
-      background: white;
-      border-radius: 24px;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
-      transition: transform 0.2s, box-shadow 0.2s;
-      border: none;
-    }
-    .stat-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 28px rgba(0,0,0,0.1);
-    }
-    .stat-card h4 {
-      color: #0ea5a4;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .stat-card p {
-      font-size: 2rem;
-      font-weight: 800;
-      margin: 0;
-      color: #0ea5a4;
-    }
-    .panel {
-      background: white;
-      border-radius: 28px;
-      border: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.05);
-      transition: box-shadow 0.2s;
-      overflow: hidden;
-    }
-    .panel:hover {
-      box-shadow: 0 12px 28px rgba(0,0,0,0.1);
-    }
-    .toolbar select, .toolbar input, .toolbar button {
-      border-radius: 40px;
-      padding: 10px 16px;
-      font-size: 0.9rem;
-      border: 1px solid #e2e8f0;
-      background: white;
-      transition: all 0.2s;
-    }
-    .toolbar select:focus, .toolbar input:focus {
-      outline: none;
-      border-color: #0ea5a4;
-      box-shadow: 0 0 0 2px rgba(14,165,164,0.2);
-    }
-    .toolbar button {
-      background: #0ea5a4;
-      color: white;
-      border: none;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    .toolbar button.secondary-btn {
-      background: #2c3e50;
-    }
-    .toolbar button:hover {
-      transform: scale(1.02);
-      background: #0b7f7e;
-    }
-    .admin-item {
-      background: #f9fbfd;
-      border: 1px solid #eef2f6;
-      border-radius: 20px;
-      transition: all 0.2s;
-    }
-    .admin-item:hover {
-      border-color: #0ea5a4;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    }
-    .pedido-card {
-      background: white;
-      border-radius: 24px;
-      padding: 20px;
-      margin-bottom: 16px;
-      border-left-width: 8px;
-      transition: all 0.2s;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-    }
-    .pedido-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 24px rgba(0,0,0,0.08);
-    }
-    .delete-pedido-btn, .map-btn, .whatsapp-btn, .print-pedido-btn {
-      border-radius: 40px;
-      padding: 8px 16px;
-      font-weight: 600;
-      transition: all 0.2s;
-      cursor: pointer;
-    }
-    .delete-pedido-btn:hover, .map-btn:hover, .whatsapp-btn:hover, .print-pedido-btn:hover {
-      transform: scale(1.02);
-    }
-    .whatsapp-btn {
-      background: #25D366;
-      color: white;
-      border: none;
-    }
-    .whatsapp-btn:hover {
-      background: #128C7E;
-    }
-    .print-pedido-btn {
-      background: #4b5563;
-      color: white;
-      border: none;
-    }
-    .print-pedido-btn:hover {
-      background: #374151;
-    }
-    .form-panel input, .form-panel select, .form-panel textarea {
-      border-radius: 20px;
-      border: 1px solid #e2e8f0;
-      padding: 12px 16px;
-      transition: all 0.2s;
-    }
-    .form-panel input:focus, .form-panel select:focus {
-      border-color: #0ea5a4;
-      outline: none;
-      box-shadow: 0 0 0 2px rgba(14,165,164,0.2);
-    }
-    .img-preview {
-      border-radius: 20px;
-      background: #f8fafc;
-    }
-    .chart-panel canvas {
-      max-height: 300px;
-      width: 100%;
-    }
-    .clicked {
-      transform: scale(0.95) !important;
-      transition: transform 0.1s ease;
-    }
-    @media (max-width: 768px) {
-      .dashboard-grid {
-        gap: 16px;
-      }
-      .stat-card p {
-        font-size: 1.5rem;
-      }
-    }
-
-    /* Estilos para editar productos */
-    .editar-productos-lista {
-      margin-bottom: 16px;
-    }
-    .editable-item .cart-item-info {
-      flex: 1;
-    }
-    .agregar-producto {
-      margin: 16px 0;
-      padding-top: 16px;
-      border-top: 1px solid #e2e8f0;
-    }
-    #nuevoProductoSelect {
-      width: 100%;
-      padding: 10px;
-      border-radius: 12px;
-      border: 1px solid #cbd5e1;
-    }
-    #nuevoProductoCantidad {
-      width: 120px;
-      padding: 8px;
-      border-radius: 12px;
-      border: 1px solid #cbd5e1;
-      margin-right: 8px;
-    }
-    .edit-pedido-btn {
-      background: #f1c40f;
-      color: #2c3e50;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-weight: 700;
-      transition: all 0.2s;
-    }
-    .edit-pedido-btn:hover {
-      background: #e67e22;
-      color: white;
-      transform: scale(1.02);
-    }
-
-    /* Pestañas */
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 24px;
-      border-bottom: 2px solid #e2e8f0;
-      padding-bottom: 8px;
-      flex-wrap: wrap;
-    }
-    .tab-btn {
-      background: none;
-      border: none;
-      padding: 10px 20px;
-      font-size: 1rem;
-      font-weight: 600;
-      color: #6b7a88;
-      cursor: pointer;
-      border-radius: 40px;
-      transition: all 0.2s;
-    }
-    .tab-btn.active {
-      background: #0ea5a4;
-      color: white;
-      box-shadow: 0 2px 8px rgba(14,165,164,0.3);
-    }
-    .tab-pane {
-      display: none;
-      animation: fadeIn 0.3s ease;
-    }
-    .tab-pane.active {
-      display: block;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Filtros de productos */
-    .product-filters {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 20px;
-      flex-wrap: wrap;
-      padding: 0 16px;
-    }
-    .product-filters input, .product-filters select {
-      padding: 10px 16px;
-      border-radius: 40px;
-      border: 1px solid #cbd5e1;
-      font-size: 0.9rem;
-      background: white;
-    }
-    .product-filters input {
-      flex: 1;
-      min-width: 200px;
-    }
-    .product-filters select {
-      width: auto;
-    }
-
-    /* Ajustes para el formulario de productos */
-    .form-panel {
-      margin-top: 24px;
-    }
-
-    /* Selector de período */
-    .period-selector {
-      background: white;
-      border-radius: 28px;
-      padding: 16px;
-      margin-bottom: 20px;
-      display: flex;
-      gap: 16px;
-      align-items: center;
-      flex-wrap: wrap;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    }
-    .chart-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 20px;
-    }
-    @media (max-width: 768px) {
-      .chart-row {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    /* ===== Celular ===== */
-    @media (max-width: 600px) {
-      /* Pestañas en una sola fila deslizable */
-      .tabs {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin-bottom: 14px;
-      }
-      .tab-btn {
-        flex: 0 0 auto;
-        padding: 8px 14px;
-        font-size: 0.9rem;
-      }
-      .toolbar select, .toolbar input, .toolbar button {
-        flex: 1 1 auto;
-        min-height: 42px;
-      }
-      .product-filters {
-        padding: 0;
-      }
-      .period-selector {
-        padding: 12px;
-        gap: 10px;
-      }
-    }
-
-    /* Estilos mejorados para impresión de tickets */
-    @media print {
-      body * {
-        visibility: hidden;
-      }
-      .ticket-print, .ticket-print * {
-        visibility: visible;
-      }
-      .ticket-print {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 58mm;
-        padding: 3mm 2mm;
-        font-family: 'Courier New', 'Lucida Console', monospace;
-        font-size: 10pt;
-        line-height: 1.3;
-      }
-      .no-print {
-        display: none;
-      }
-    }
-    .ticket-print {
-      width: 58mm;
-      margin: 0 auto;
-      font-family: 'Courier New', 'Lucida Console', monospace;
-      font-size: 10pt;
-      background: white;
-      color: black;
-    }
-    .ticket-print .header {
-      text-align: center;
-      margin-bottom: 5px;
-      border-bottom: 1px dashed #000;
-      padding-bottom: 5px;
-    }
-    .ticket-print .header h2 {
-      font-size: 14pt;
-      margin: 0;
-      letter-spacing: 1px;
-    }
-    .ticket-print .header p {
-      margin: 2px 0;
-      font-size: 9pt;
-    }
-    .ticket-print .pedido-info {
-      text-align: center;
-      margin: 8px 0;
-      font-weight: bold;
-      border: 1px solid #000;
-      padding: 4px;
-      background: #f0f0f0;
-    }
-    .ticket-print .cliente-info {
-      margin: 8px 0;
-      border-top: 1px dotted #000;
-      border-bottom: 1px dotted #000;
-      padding: 5px 0;
-    }
-    .ticket-print .productos-tabla {
-      width: 100%;
-      margin: 8px 0;
-      border-collapse: collapse;
-    }
-    .ticket-print .productos-tabla th {
-      text-align: left;
-      border-bottom: 1px solid #000;
-      padding: 3px 0;
-    }
-    .ticket-print .productos-tabla td {
-      padding: 2px 0;
-    }
-    .ticket-print .productos-tabla .cantidad {
-      width: 20%;
-      text-align: center;
-    }
-    .ticket-print .productos-tabla .descripcion {
-      width: 55%;
-    }
-    .ticket-print .productos-tabla .importe {
-      width: 25%;
-      text-align: right;
-    }
-    .ticket-print .totales {
-      margin-top: 8px;
-      border-top: 1px dashed #000;
-      padding-top: 4px;
-    }
-    .ticket-print .linea-total {
-      display: flex;
-      justify-content: space-between;
-      font-weight: bold;
-    }
-    .ticket-print .gracias {
-      text-align: center;
-      margin-top: 12px;
-      font-size: 9pt;
-      border-top: 1px dashed #000;
-      padding-top: 6px;
-    }
-    .ticket-print .barcode {
-      text-align: center;
-      font-family: 'Courier New', monospace;
-      font-size: 14pt;
-      letter-spacing: 2px;
-      margin: 8px 0;
-    }
-  </style>
 </head>
-<body>
-  <header class="header">
-    <div class="header-inner">
-      <div class="logo-area">
-        <h1>🐟 Fish-Mar Admin</h1>
-        <p class="tagline">Control total del negocio</p>
+<body class="admin">
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand">
+      <div class="brand-logo">🐟</div>
+      <div class="brand-text">
+        <div class="brand-title">FishMar</div>
+        <div class="brand-sub">Administración</div>
       </div>
-      <button class="ghost-btn" onclick="logout()">Cerrar sesión</button>
     </div>
-  </header>
+    <button class="btn-appbar" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>
+  </div>
+</header>
 
-  <main class="container dashboard">
-    <!-- Pestañas -->
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="pedidos">📦 Pedidos</button>
-      <button class="tab-btn" data-tab="productos">🐟 Productos</button>
-      <button class="tab-btn" data-tab="metricas">📊 Métricas</button>
-      <button class="tab-btn" data-tab="ventaslocal">🏪 Ventas local</button>
-      <button class="tab-btn" data-tab="usuarios" id="tabUsuariosBtn" style="display: none;">👥 Usuarios</button>
+<!-- Pestañas: abajo en celular, arriba en computadora -->
+<nav class="tabbar" id="tabbar">
+  <button class="tab-btn active" data-tab="pedidos"><i class="fa-solid fa-motorcycle"></i><span>Pedidos</span></button>
+  <button class="tab-btn" data-tab="productos"><i class="fa-solid fa-fish"></i><span>Productos</span></button>
+  <button class="tab-btn" data-tab="metricas"><i class="fa-solid fa-chart-line"></i><span>Ventas</span></button>
+  <button class="tab-btn" data-tab="ventaslocal"><i class="fa-solid fa-utensils"></i><span>Local</span></button>
+  <button class="tab-btn" data-tab="usuarios" id="tabUsuariosBtn" hidden><i class="fa-solid fa-users"></i><span>Usuarios</span></button>
+</nav>
+
+<main class="page page-wide admin-page">
+
+  <!-- ============ PEDIDOS A DOMICILIO ============ -->
+  <section id="tabPedidos" class="tab-pane active">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Pedidos a domicilio</h2>
+        <p class="section-sub" id="resumenPedidos">Cargando…</p>
+      </div>
     </div>
 
-    <!-- PANEL DE PEDIDOS -->
-    <div id="tabPedidos" class="tab-pane active">
-      <div class="panel pedidos-panel">
-        <div class="panel-header">
-          <h2>Pedidos</h2>
-          <div class="toolbar">
-            <select id="filtroEstado" onchange="cargarPedidos()">
-              <option value="Todos">Todos</option>
-              <option value="Recibido">Recibido</option>
-              <option value="En proceso">En proceso</option>
-              <option value="El repartidor está en camino">En camino</option>
-              <option value="Entregado">Entregado</option>
-            </select>
-            <input id="filtroFecha" type="date" onchange="cargarPedidos()" />
-            <button class="primary-btn" onclick="ponerHoy()">Hoy</button>
-            <button class="secondary-btn" onclick="cerrarDia()">Cerrar día</button>
-          </div>
+    <div class="chips" id="filtrosEstado">
+      <button class="chip is-active" data-estado="Pendientes">Pendientes <span class="count" data-count="Pendientes">0</span></button>
+      <button class="chip" data-estado="Recibido">Recibidos <span class="count" data-count="Recibido">0</span></button>
+      <button class="chip" data-estado="En proceso">Preparando <span class="count" data-count="En proceso">0</span></button>
+      <button class="chip" data-estado="El repartidor está en camino">En camino <span class="count" data-count="El repartidor está en camino">0</span></button>
+      <button class="chip" data-estado="Entregado">Entregados <span class="count" data-count="Entregado">0</span></button>
+      <button class="chip" data-estado="Todos">Todos</button>
+    </div>
+
+    <div class="row mt-8">
+      <div class="field grow">
+        <label for="filtroFecha" class="sr-only">Día</label>
+        <input id="filtroFecha" type="date" class="input" />
+      </div>
+      <button class="btn btn-soft" onclick="ponerHoy()">Hoy</button>
+      <button class="btn btn-outline" onclick="limpiarFecha()">Todos</button>
+    </div>
+
+    <div id="pedidos" class="orders-grid mt-16"></div>
+
+    <div class="card mt-24">
+      <h3 class="strong">Efectivo cobrado por repartidor</h3>
+      <p class="small muted">Pedidos en efectivo ya entregados, según el filtro de arriba.</p>
+      <div id="resumenRepartidores" class="list mt-8"></div>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCTOS ============ -->
+  <section id="tabProductos" class="tab-pane">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Productos</h2>
+        <p class="section-sub" id="resumenProductos">Tu menú y precios</p>
+      </div>
+      <button class="btn btn-primary" onclick="abrirModalProducto()"><i class="fa-solid fa-plus"></i> Nuevo</button>
+    </div>
+    <div class="search">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" id="searchProducto" class="input" placeholder="Buscar producto" oninput="filtrarProductos()" />
+    </div>
+    <div class="chips mt-8" id="filtroCategoriaChips">
+      <button class="chip is-active" data-cat="all">Todos</button>
+      <button class="chip" data-cat="Pescadería">🐟 Pescadería</button>
+      <button class="chip" data-cat="Marisquería">🦐 Marisquería</button>
+    </div>
+    <div id="productosAdmin" class="list mt-16"></div>
+  </section>
+
+  <!-- ============ VENTAS (MÉTRICAS) ============ -->
+  <section id="tabMetricas" class="tab-pane">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Ventas</h2>
+        <p class="section-sub">Domicilio + restaurante</p>
+      </div>
+    </div>
+    <div class="chips" id="filtrosPeriodo">
+      <button class="chip is-active" data-periodo="hoy">Hoy</button>
+      <button class="chip" data-periodo="semana">Esta semana</button>
+      <button class="chip" data-periodo="mes">Este mes</button>
+      <button class="chip" data-periodo="personalizado"><i class="fa-regular fa-calendar"></i> Elegir fechas</button>
+    </div>
+    <div id="fechasPersonalizadas" class="card mt-8" hidden>
+      <div class="row">
+        <div class="field grow"><label for="fechaInicio" class="small">Desde</label><input type="date" id="fechaInicio" class="input" /></div>
+        <div class="field grow"><label for="fechaFin" class="small">Hasta</label><input type="date" id="fechaFin" class="input" /></div>
+      </div>
+      <button class="btn btn-primary btn-block mt-8" onclick="aplicarPersonalizado()">Ver ventas</button>
+    </div>
+
+    <div class="stats mt-16">
+      <div class="stat highlight"><div class="stat-label">Ingresos</div><div class="stat-value" id="statIngresos">$0.00</div></div>
+      <div class="stat"><div class="stat-label">Pedidos</div><div class="stat-value" id="statPedidos">0</div></div>
+      <div class="stat"><div class="stat-label">Preparando</div><div class="stat-value" id="statProceso">0</div></div>
+      <div class="stat"><div class="stat-label">Entregados</div><div class="stat-value" id="statEntregados">0</div></div>
+    </div>
+
+    <div class="charts mt-16">
+      <div class="card">
+        <h3 class="strong">Ingresos por día</h3>
+        <div class="chart-box"><canvas id="graficaIngresosDiarios"></canvas></div>
+      </div>
+      <div class="card">
+        <h3 class="strong">Ventas por día de la semana</h3>
+        <div class="chart-box"><canvas id="graficaVentasPorDia"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VENTAS EN EL LOCAL ============ -->
+  <section id="tabVentaslocal" class="tab-pane">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Ventas en el restaurante</h2>
+        <p class="section-sub">Mesas cobradas por los meseros</p>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field grow">
+        <label for="filtroFechaLocal" class="sr-only">Día</label>
+        <input type="date" id="filtroFechaLocal" class="input" />
+      </div>
+      <button class="btn btn-soft" onclick="limpiarFiltroLocal()">Hoy</button>
+    </div>
+    <div class="stats mt-16">
+      <div class="stat highlight"><div class="stat-label">Total del día</div><div class="stat-value" id="totalLocalDia">$0.00</div></div>
+      <div class="stat"><div class="stat-label">Mesas cobradas</div><div class="stat-value" id="totalPedidosLocal">0</div></div>
+    </div>
+    <div id="listaVentasLocal" class="list mt-16"></div>
+  </section>
+
+  <!-- ============ USUARIOS (solo superadmin) ============ -->
+  <section id="tabUsuarios" class="tab-pane">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Usuarios</h2>
+        <p class="section-sub">Quién puede entrar al sistema</p>
+      </div>
+      <button class="btn btn-primary" onclick="mostrarModalCrearUsuario()"><i class="fa-solid fa-user-plus"></i> Nuevo</button>
+    </div>
+    <div id="listaUsuarios" class="list"></div>
+  </section>
+</main>
+
+<!-- Hoja: producto nuevo / editar -->
+<div id="modalProducto" class="modal" onclick="if (event.target === this) cerrarModalProducto()">
+  <div class="sheet full">
+    <div class="sheet-header">
+      <h3 class="sheet-title" id="tituloModalProducto">Nuevo producto</h3>
+      <button class="sheet-close" onclick="cerrarModalProducto()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label for="nombre">Nombre</label>
+        <input id="nombre" class="input" type="text" maxlength="100" placeholder="Ej. Mojarra frita" />
+      </div>
+      <div class="row">
+        <div class="field grow">
+          <label for="precio">Precio</label>
+          <input id="precio" class="input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="$" />
         </div>
-        <div id="pedidos" class="admin-list"></div>
-      </div>
-
-      <!-- Resumen de recaudación por repartidor -->
-      <div class="panel" style="margin-top: 24px;">
-        <h2>💰 Recaudación por repartidor (efectivo entregado)</h2>
-        <div id="resumenRepartidores" class="admin-list">
-          <div class="panel">Cargando...</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- PANEL DE PRODUCTOS -->
-    <div id="tabProductos" class="tab-pane">
-      <div class="panel">
-        <h2>Productos</h2>
-        <div class="product-filters">
-          <input type="text" id="searchProducto" placeholder="🔍 Buscar por nombre..." onkeyup="filtrarProductos()">
-          <select id="filtroCategoriaProducto" onchange="filtrarProductos()">
-            <option value="all">Todas las categorías</option>
-            <option value="Pescadería">Pescadería</option>
-            <option value="Marisquería">Marisquería</option>
+        <div class="field grow">
+          <label for="tipoVenta">Se vende</label>
+          <select id="tipoVenta" class="select">
+            <option value="pieza">Por pieza</option>
+            <option value="granel">Por kilo</option>
           </select>
         </div>
-        <div id="productosAdmin" class="admin-list"></div>
       </div>
-
-      <div class="panel form-panel" id="productFormPanel">
-        <h2>Nuevo producto</h2>
-        <input id="nombre" type="text" placeholder="Nombre" />
-        <input id="precio" type="number" placeholder="Precio" />
-        <select id="categoria" onchange="toggleSubcategoria()">
+      <div class="field">
+        <label for="categoria">Categoría</label>
+        <select id="categoria" class="select" onchange="toggleSubcategoria()">
           <option>Pescadería</option>
           <option>Marisquería</option>
         </select>
-
-        <div id="subcategoriaDiv" style="display: none;">
-          <select id="subcategoria">
-            <option value="">Selecciona subcategoría</option>
-            <option value="Antojitos">Antojitos</option>
-            <option value="Mojarras">Mojarras</option>
-            <option value="Cocteles">Cocteles</option>
-            <option value="Filetes">Filetes</option>
-            <option value="Sushi y Onigiri">Sushi y Onigiri</option>
-            <option value="Camarones">Camarones</option>
-            <option value="Tostadas">Tostadas</option>
-            <option value="Ensaladas y Papas">Ensaladas y Papas</option>
-            <option value="Postres">Postres</option>
-            <option value="Paquetes para Compartir">Paquetes para Compartir</option>
-            <option value="Bebidas">Bebidas</option>
-          </select>
-        </div>
-
-        <input id="descripcion" type="text" placeholder="Descripción del producto" />
-        <select id="tipoVenta">
-          <option value="pieza">Venta por pieza</option>
-          <option value="granel">Venta por kg (a granel)</option>
+      </div>
+      <div class="field" id="subcategoriaDiv" hidden>
+        <label for="subcategoria">Sección del menú</label>
+        <select id="subcategoria" class="select">
+          <option value="">Elige una sección</option>
+          <option value="Antojitos">Antojitos</option>
+          <option value="Mojarras">Mojarras</option>
+          <option value="Cocteles">Cocteles</option>
+          <option value="Filetes">Filetes</option>
+          <option value="Sushi y Onigiri">Sushi y Onigiri</option>
+          <option value="Camarones">Camarones</option>
+          <option value="Tostadas">Tostadas</option>
+          <option value="Ensaladas y Papas">Ensaladas y Papas</option>
+          <option value="Postres">Postres</option>
+          <option value="Paquetes para Compartir">Paquetes para Compartir</option>
+          <option value="Bebidas">Bebidas</option>
         </select>
-        <input id="imagen_url" type="text" placeholder="URL imagen" />
-        <div class="img-preview">
-          <img id="previewImg" src="" alt="Vista previa" />
-        </div>
-        <button class="primary-btn" onclick="crearProducto()">Guardar</button>
-        <button class="secondary-btn" onclick="limpiarFormulario()">Limpiar</button>
+      </div>
+      <div class="field">
+        <label for="descripcion">Descripción (opcional)</label>
+        <input id="descripcion" class="input" type="text" maxlength="200" placeholder="Ej. Con ensalada y papas" />
+      </div>
+      <div class="field">
+        <label for="imagen_url">Enlace de la foto (opcional)</label>
+        <input id="imagen_url" class="input" type="url" placeholder="https://…" />
+        <img id="previewImg" class="img-preview" alt="" hidden />
       </div>
     </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-lg btn-block" id="btnGuardarProducto" onclick="crearProducto()">
+        <i class="fa-solid fa-check"></i> Guardar producto
+      </button>
+    </div>
+  </div>
+</div>
 
-    <!-- PANEL DE MÉTRICAS -->
-    <div id="tabMetricas" class="tab-pane">
-      <div class="period-selector">
-        <label><strong>Período:</strong></label>
-        <select id="periodoSelector" onchange="cambiarPeriodo()">
-          <option value="hoy">Hoy</option>
-          <option value="semana">Esta semana</option>
-          <option value="mes">Este mes</option>
-          <option value="personalizado">Personalizado</option>
+<!-- Hoja: editar productos de un pedido -->
+<div id="modalEditarPedido" class="modal" onclick="if (event.target === this) cerrarModalEditarPedido()">
+  <div class="sheet full">
+    <div class="sheet-header">
+      <h3 class="sheet-title">Editar pedido <span id="modalPedidoNumero"></span></h3>
+      <button class="sheet-close" onclick="cerrarModalEditarPedido()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body">
+      <div id="editarProductosLista" class="list"></div>
+
+      <div class="card stack-sm">
+        <label class="label" for="nuevoProductoSelect">Agregar producto</label>
+        <select id="nuevoProductoSelect" class="select">
+          <option value="">Elige un producto</option>
         </select>
-        <div id="fechasPersonalizadas" style="display: none; gap: 8px; align-items: center;">
-          <input type="date" id="fechaInicio" />
-          <span>a</span>
-          <input type="date" id="fechaFin" />
-          <button class="small-btn" onclick="aplicarPersonalizado()">Aplicar</button>
+        <div class="row" id="nuevoProductoCantidadContainer" hidden>
+          <input type="number" id="nuevoProductoCantidad" class="input grow" step="0.25" min="0.25" inputmode="decimal" placeholder="Cantidad" />
+          <button class="btn btn-soft" onclick="agregarProductoAPedido()"><i class="fa-solid fa-plus"></i> Agregar</button>
         </div>
       </div>
 
-      <section class="stats-grid">
-        <div class="stat-card">
-          <h4>Pedidos</h4>
-          <p id="statPedidos">0</p>
-        </div>
-        <div class="stat-card">
-          <h4>Ingresos</h4>
-          <p id="statIngresos">$0.00</p>
-        </div>
-        <div class="stat-card">
-          <h4>En proceso</h4>
-          <p id="statProceso">0</p>
-        </div>
-        <div class="stat-card">
-          <h4>Entregados</h4>
-          <p id="statEntregados">0</p>
-        </div>
-      </section>
-
-      <div class="chart-row">
-        <div class="panel chart-panel">
-          <h3>📈 Evolución de ingresos (diario)</h3>
-          <canvas id="graficaIngresosDiarios"></canvas>
-        </div>
-        <div class="panel chart-panel">
-          <h3>📊 Ventas por día de la semana</h3>
-          <canvas id="graficaVentasPorDia"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- PANEL DE VENTAS LOCAL -->
-    <div id="tabVentaslocal" class="tab-pane">
-      <div class="panel">
-        <h2>Ventas en local (restaurante)</h2>
-        <div class="toolbar" style="margin-bottom: 20px;">
-          <input type="date" id="filtroFechaLocal" onchange="cargarVentasLocal()" />
-          <button class="primary-btn" onclick="cargarVentasLocal()">Filtrar</button>
-          <button class="secondary-btn" onclick="limpiarFiltroLocal()">Limpiar filtro</button>
-        </div>
-        <div class="stats-grid" style="margin-bottom: 20px;">
-          <div class="stat-card">
-            <h4>Total del día</h4>
-            <p id="totalLocalDia">$0.00</p>
-          </div>
-          <div class="stat-card">
-            <h4>Pedidos cerrados</h4>
-            <p id="totalPedidosLocal">0</p>
-          </div>
-        </div>
-        <div id="listaVentasLocal" class="admin-list">
-          <div class="panel">Selecciona una fecha para ver las ventas locales</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- PANEL DE USUARIOS (solo super admin) -->
-    <div id="tabUsuarios" class="tab-pane">
-      <div class="panel">
-        <h2>Gestión de usuarios</h2>
-        <div style="margin-bottom: 20px;">
-          <button class="primary-btn" onclick="mostrarModalCrearUsuario()">➕ Nuevo usuario</button>
-        </div>
-        <div id="listaUsuarios" class="admin-list"></div>
-      </div>
-    </div>
-  </main>
-
-  <!-- Modal para editar productos del pedido -->
-  <div id="modalEditarPedido" class="cart-modal" style="display: none;">
-    <div class="cart-modal-content" style="max-width: 700px;">
-      <div class="cart-modal-header">
-        <h3>✏️ Editar productos del pedido <span id="modalPedidoNumero"></span></h3>
-        <span class="close-modal" onclick="cerrarModalEditarPedido()">&times;</span>
-      </div>
-      <div class="cart-modal-scrollable">
-        <div id="editarProductosLista" class="editar-productos-lista"></div>
-        <div class="agregar-producto">
-          <label>Agregar producto:</label>
-          <select id="nuevoProductoSelect">
-            <option value="">-- Selecciona --</option>
-          </select>
-          <div id="nuevoProductoCantidadContainer" style="display: none; margin-top: 10px;">
-            <input type="number" id="nuevoProductoCantidad" step="0.01" min="0.01" placeholder="Cantidad (kg o piezas)">
-            <button class="small-btn" onclick="agregarProductoAPedido()">➕ Agregar</button>
-          </div>
-        </div>
-        <div class="descuento-section" style="margin: 16px 0; padding: 12px; background: #f8fafc; border-radius: 20px;">
-          <h4 style="margin: 0 0 12px 0;">🎁 Descuento</h4>
-          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <input type="number" id="descuentoValor" placeholder="Cantidad" step="0.01" min="0" style="width: 120px; padding: 8px; border-radius: 12px; border: 1px solid #cbd5e1;">
-            <select id="descuentoTipo" style="padding: 8px; border-radius: 12px; border: 1px solid #cbd5e1;">
-              <option value="monto">Monto ($)</option>
-              <option value="porcentaje">Porcentaje (%)</option>
+      <details class="more card card-flat">
+        <summary><span><i class="fa-solid fa-tag"></i> Descuento</span></summary>
+        <div class="stack-sm mt-8">
+          <div class="row">
+            <input type="number" id="descuentoValor" class="input grow" inputmode="decimal" placeholder="Cantidad" step="0.01" min="0" />
+            <select id="descuentoTipo" class="select" style="width:auto;">
+              <option value="monto">$ pesos</option>
+              <option value="porcentaje">% por ciento</option>
             </select>
-            <button class="small-btn" onclick="aplicarDescuento()">Aplicar</button>
-            <button class="small-btn" onclick="quitarDescuento()">Quitar</button>
           </div>
-          <div id="infoDescuento" style="margin-top: 12px;">
-            <div>Subtotal: $<span id="subtotalSinDescuento">0.00</span></div>
-            <div>Descuento: $<span id="montoDescuento">0.00</span></div>
-            <div><strong>Total con descuento: $<span id="totalConDescuento">0.00</span></strong></div>
+          <div class="row">
+            <button class="btn btn-soft grow" onclick="aplicarDescuento()">Aplicar</button>
+            <button class="btn btn-outline grow" onclick="quitarDescuento()">Quitar</button>
           </div>
         </div>
-        <div class="cart-summary-modal">
-          <div class="summary-row">
-            <span>Total actualizado:</span>
-            <strong>$<span id="modalEditarTotal">0.00</span></strong>
-          </div>
-        </div>
-      </div>
-      <div class="cart-modal-footer">
-        <button class="primary-btn" onclick="guardarEdicionPedido()">Guardar cambios</button>
-        <button class="secondary-btn" onclick="cerrarModalEditarPedido()">Cancelar</button>
+      </details>
+
+      <div class="stack-sm small">
+        <div class="row-between"><span class="muted">Subtotal</span><span>$<span id="subtotalSinDescuento">0.00</span></span></div>
+        <div class="row-between"><span class="muted">Descuento</span><span>−$<span id="montoDescuento">0.00</span></span></div>
+        <span id="totalConDescuento" hidden></span>
       </div>
     </div>
-  </div>
-
-  <!-- Modal para enviar WhatsApp -->
-  <div id="modalWhatsApp" class="cart-modal" style="display: none;">
-    <div class="cart-modal-content" style="max-width: 550px;">
-      <div class="cart-modal-header">
-        <h3>📱 Enviar WhatsApp al cliente</h3>
-        <span class="close-modal" onclick="cerrarModalWhatsApp()">&times;</span>
+    <div class="sheet-footer">
+      <div class="big-total">
+        <span class="muted strong">Total</span>
+        <span class="amount">$<span id="modalEditarTotal">0.00</span></span>
       </div>
-      <div class="cart-modal-scrollable">
-        <div id="whatsappPedidoInfo" style="margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: 16px;">
-          <!-- Se llenará con datos del pedido -->
-        </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Número de teléfono:</label>
-          <input type="text" id="whatsappNumero" readonly style="background: #f1f5f9; width: 100%; padding: 10px; border-radius: 12px; border: 1px solid #cbd5e1;" />
-        </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Mensaje:</label>
-          <textarea id="whatsappMensaje" rows="6" style="width: 100%; padding: 12px; border-radius: 16px; border: 1px solid #cbd5e1;"></textarea>
-        </div>
-        <div class="form-group">
-          <button class="primary-btn" onclick="enviarWhatsApp()">📤 Enviar mensaje</button>
-        </div>
-      </div>
+      <button class="btn btn-primary btn-lg btn-block" onclick="guardarEdicionPedido()"><i class="fa-solid fa-check"></i> Guardar cambios</button>
     </div>
   </div>
+</div>
 
-  <!-- Modal para crear usuario -->
-  <div id="modalCrearUsuario" class="cart-modal" style="display: none;">
-    <div class="cart-modal-content" style="max-width: 500px;">
-      <div class="cart-modal-header">
-        <h3>Crear nuevo usuario</h3>
-        <span class="close-modal" onclick="cerrarModalCrearUsuario()">&times;</span>
+<!-- Hoja: WhatsApp al cliente -->
+<div id="modalWhatsApp" class="modal" onclick="if (event.target === this) cerrarModalWhatsApp()">
+  <div class="sheet">
+    <div class="sheet-header">
+      <h3 class="sheet-title">Escribir al cliente</h3>
+      <button class="sheet-close" onclick="cerrarModalWhatsApp()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body">
+      <div id="whatsappPedidoInfo" class="total-line"></div>
+      <div class="field">
+        <label for="whatsappNumero">Número</label>
+        <input type="text" id="whatsappNumero" class="input" readonly />
       </div>
-      <div class="cart-modal-scrollable">
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Correo electrónico:</label>
-          <input type="email" id="nuevoEmail" placeholder="ejemplo@dominio.com" style="width: 100%; padding: 10px; border-radius: 12px; border: 1px solid #cbd5e1;" />
-        </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Rol:</label>
-          <select id="nuevoRol" style="width: 100%; padding: 10px; border-radius: 12px; border: 1px solid #cbd5e1;">
-            <option value="admin">Administrador</option>
-            <option value="repartidor">Repartidor</option>
-            <option value="mesero">Mesero</option>
-          </select>
-        </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Nombre completo:</label>
-          <input type="text" id="nuevoNombre" placeholder="Nombre del usuario" style="width: 100%; padding: 10px; border-radius: 12px; border: 1px solid #cbd5e1;" />
-        </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Contraseña (dejar en blanco para que se envíe correo):</label>
-          <input type="password" id="nuevoPassword" placeholder="Opcional" style="width: 100%; padding: 10px; border-radius: 12px; border: 1px solid #cbd5e1;" />
-          <small>Si no ingresas contraseña, se enviará un correo para que el usuario la establezca.</small>
-        </div>
-        <div class="form-group">
-          <button class="primary-btn" onclick="crearUsuario()">Crear usuario</button>
-        </div>
+      <div class="field">
+        <label for="whatsappMensaje">Mensaje</label>
+        <textarea id="whatsappMensaje" class="textarea" rows="7"></textarea>
       </div>
     </div>
-  </div>
-
-  <!-- Modal para ver detalles del pedido local (mejorado) -->
-  <div id="modalDetallePedidoLocal" class="cart-modal" style="display: none;">
-    <div class="cart-modal-content" style="max-width: 600px;">
-      <div class="cart-modal-header">
-        <h3>📋 Detalle del pedido local</h3>
-        <span class="close-modal" onclick="cerrarModalDetallePedidoLocal()">&times;</span>
-      </div>
-      <div class="cart-modal-scrollable">
-        <div id="detallePedidoLocalContent">
-          <!-- Contenido dinámico -->
-        </div>
-      </div>
-      <div class="cart-modal-footer">
-        <button class="secondary-btn" onclick="cerrarModalDetallePedidoLocal()">Cerrar</button>
-      </div>
+    <div class="sheet-footer">
+      <button class="btn btn-whatsapp btn-lg btn-block" onclick="enviarWhatsApp()"><i class="fa-brands fa-whatsapp"></i> Abrir WhatsApp</button>
     </div>
   </div>
+</div>
 
-  <!-- Modal de confirmación para eliminar pedido local -->
-  <div id="modalConfirmarEliminarLocal" class="cart-modal" style="display: none;">
-    <div class="cart-modal-content" style="max-width: 400px;">
-      <div class="cart-modal-header">
-        <h3>⚠️ Confirmar eliminación</h3>
-        <span class="close-modal" onclick="cerrarModalConfirmarEliminarLocal()">&times;</span>
+<!-- Hoja: nuevo usuario -->
+<div id="modalCrearUsuario" class="modal" onclick="if (event.target === this) cerrarModalCrearUsuario()">
+  <div class="sheet">
+    <div class="sheet-header">
+      <h3 class="sheet-title">Nuevo usuario</h3>
+      <button class="sheet-close" onclick="cerrarModalCrearUsuario()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label for="nuevoNombre">Nombre completo</label>
+        <input type="text" id="nuevoNombre" class="input" placeholder="Ej. Luis Gómez" />
       </div>
-      <div class="cart-modal-scrollable">
-        <p>¿Estás seguro de eliminar este pedido local?</p>
-        <p>Esta acción no se puede deshacer.</p>
+      <div class="field">
+        <label for="nuevoEmail">Correo</label>
+        <input type="email" id="nuevoEmail" class="input" inputmode="email" autocapitalize="none" placeholder="ejemplo@correo.com" />
       </div>
-      <div class="cart-modal-footer">
-        <button class="secondary-btn" onclick="cerrarModalConfirmarEliminarLocal()">Cancelar</button>
-        <button class="delete-pedido-btn" id="btnConfirmarEliminarLocal">Sí, eliminar</button>
+      <div class="field">
+        <label for="nuevoRol">Puesto</label>
+        <select id="nuevoRol" class="select">
+          <option value="mesero">Mesero</option>
+          <option value="repartidor">Repartidor</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="nuevoPassword">Contraseña</label>
+        <input type="text" id="nuevoPassword" class="input" autocomplete="new-password" placeholder="Mínimo 6 caracteres" />
+        <span class="hint">Si la dejas vacía, le llegará un correo para que la cree.</span>
       </div>
     </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-lg btn-block" onclick="crearUsuario()"><i class="fa-solid fa-user-plus"></i> Crear usuario</button>
+    </div>
   </div>
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-  <script src="js/supabase.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/dashboard.js"></script>
+<!-- Hoja: detalle de una venta del local -->
+<div id="modalDetallePedidoLocal" class="modal" onclick="if (event.target === this) cerrarModalDetallePedidoLocal()">
+  <div class="sheet">
+    <div class="sheet-header">
+      <h3 class="sheet-title">Detalle de la venta</h3>
+      <button class="sheet-close" onclick="cerrarModalDetallePedidoLocal()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="sheet-body" id="detallePedidoLocalContent"></div>
+    <div class="sheet-footer">
+      <button class="btn btn-outline btn-block" onclick="cerrarModalDetallePedidoLocal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hoja: confirmar borrar venta del local -->
+<div id="modalConfirmarEliminarLocal" class="modal" onclick="if (event.target === this) cerrarModalConfirmarEliminarLocal()">
+  <div class="sheet">
+    <div class="sheet-body center" style="padding-top: 28px;">
+      <div class="success-icon" style="background:var(--danger-soft);color:var(--danger);"><i class="fa-solid fa-trash-can"></i></div>
+      <h3 class="strong" style="font-size:1.2rem;">¿Borrar esta venta?</h3>
+      <p class="muted">Ya no contará en los reportes. No se puede deshacer.</p>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-danger btn-lg btn-block" id="btnConfirmarEliminarLocal">Sí, borrar</button>
+      <button class="btn btn-outline btn-block" onclick="cerrarModalConfirmarEliminarLocal()">No, regresar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+<script src="js/supabase.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/dashboard.js"></script>
 </body>
 </html>

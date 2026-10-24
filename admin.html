@@ -2,193 +2,48 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FishMar | Acceso</title>
-  
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      min-height: 100vh;
-      background: url('https://scontent-qro1-2.xx.fbcdn.net/v/t39.30808-6/433536873_923432783116269_989285097131161897_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=1d70fc&_nc_eui2=AeGKNn3GgiFoFbvxhnCsokMs8wJWksUCPuHzAlaSxQI-4cLLTuEmYdMvM3hbDLLyUSGiLPrzVbEtpdEngV1zcz5e&_nc_ohc=HtkjcyibaDcQ7kNvwF6RD-n&_nc_oc=Adq2G45CY1Wtg0ibmRT1woGGz5jejyF3dfxvAMgjzvY4uM7v_HDoheANYZ2iSgy5s0w&_nc_zt=23&_nc_ht=scontent-qro1-2.xx&_nc_gid=NMz-aXCbWxJQsc7ynBoARQ&_nc_ss=7a32e&oh=00_AfzUu_Xa2BrCoubRvhsaaD62Q17Tf5hQAfUG_bu-0kMMEQ&oe=69C746C3') no-repeat center center fixed;
-      background-size: cover;
-      position: relative;
-    }
-
-    body::before {
-      content: "";
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.6);
-      z-index: 0;
-    }
-
-    .auth-shell {
-      position: relative;
-      z-index: 1;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-    }
-
-    .auth-card {
-      background: rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(12px);
-      border-radius: 32px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-      padding: 40px 32px;
-      width: min(440px, 100%);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .auth-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 30px 50px rgba(0, 0, 0, 0.4);
-    }
-
-    .auth-card h1 {
-      margin: 0 0 8px 0;
-      font-size: 2.2rem;
-      text-align: center;
-      color: #ffffff;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-      letter-spacing: -0.5px;
-    }
-
-    .auth-card p {
-      text-align: center;
-      color: #f0f0f0;
-      margin-bottom: 32px;
-      font-size: 1rem;
-      opacity: 0.9;
-    }
-
-    .input-icon {
-      position: relative;
-      margin-bottom: 20px;
-    }
-
-    .input-icon i {
-      position: absolute;
-      left: 16px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #0ea5a4;
-      font-size: 1.2rem;
-      pointer-events: none;
-      font-style: normal;
-    }
-
-    .input-icon input {
-      width: 100%;
-      padding: 14px 16px 14px 48px;
-      border: none;
-      border-radius: 40px;
-      font-size: 1rem;
-      background: rgba(255, 255, 255, 0.9);
-      transition: all 0.3s;
-      outline: none;
-      color: #15202b;
-    }
-
-    .input-icon input:focus {
-      background: white;
-      box-shadow: 0 0 0 3px rgba(14, 165, 164, 0.5);
-    }
-
-    .error-message {
-      background: rgba(220, 38, 38, 0.9);
-      color: white;
-      padding: 12px 16px;
-      border-radius: 40px;
-      margin-bottom: 20px;
-      font-size: 0.9rem;
-      text-align: center;
-      backdrop-filter: blur(4px);
-      display: none;
-    }
-
-    .error-message.show {
-      display: block;
-    }
-
-    .primary-btn {
-      width: 100%;
-      background: linear-gradient(135deg, #0ea5a4, #0b7f7e);
-      color: white;
-      border: none;
-      border-radius: 40px;
-      padding: 14px;
-      font-size: 1rem;
-      font-weight: bold;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-      margin-top: 8px;
-    }
-
-    .primary-btn:hover {
-      transform: scale(1.02);
-      box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-    }
-
-    .primary-btn:active {
-      transform: scale(0.98);
-    }
-
-    .extra-links {
-      text-align: center;
-      margin-top: 24px;
-    }
-
-    .extra-links a {
-      color: #f0f0f0;
-      text-decoration: none;
-      font-size: 0.85rem;
-      opacity: 0.8;
-      transition: opacity 0.2s;
-    }
-
-    .extra-links a:hover {
-      opacity: 1;
-      text-decoration: underline;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d2a38" />
+  <title>FishMar | Entrar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <main class="auth-shell">
-    <div class="auth-card">
-      <h1>🐟 FishMar</h1>
-      <p>Acceso de administrador y repartidor</p>
-
-      <div id="loginError" class="error-message"></div>
-
-      <div class="input-icon">
-        <i>📧</i>
-        <input id="email" type="email" placeholder="Correo electrónico" />
+  <main class="auth">
+    <form class="auth-card stack" id="loginForm" novalidate>
+      <div class="center">
+        <div class="auth-logo">🐟</div>
+        <h1 style="font-size:1.6rem;font-weight:800;">FishMar</h1>
+        <p class="muted mt-8">Entra con tu correo y tu contraseña</p>
       </div>
 
-      <div class="input-icon">
-        <i>🔒</i>
-        <input id="password" type="password" placeholder="Contraseña" />
+      <div id="loginError" class="error-message" role="alert"></div>
+
+      <div class="field">
+        <label for="email">Correo</label>
+        <input id="email" class="input" type="email" inputmode="email" autocomplete="username"
+               autocapitalize="none" placeholder="ejemplo@correo.com" />
       </div>
 
-      <button class="primary-btn" onclick="login()">Entrar</button>
-
-      <div class="extra-links">
-        <a href="#">¿Olvidaste tu contraseña?</a>
+      <div class="field">
+        <label for="password">Contraseña</label>
+        <div class="password-wrap">
+          <input id="password" class="input" type="password" autocomplete="current-password" placeholder="Tu contraseña" />
+          <button type="button" class="password-toggle" id="togglePassword" aria-label="Mostrar contraseña">
+            <i class="fa-regular fa-eye"></i> Ver
+          </button>
+        </div>
       </div>
-    </div>
+
+      <button type="submit" class="btn btn-primary btn-lg btn-block" id="btnEntrar">
+        Entrar <i class="fa-solid fa-arrow-right"></i>
+      </button>
+
+      <p class="muted small center">¿Olvidaste tu contraseña? Pide al administrador que te la cambie.</p>
+    </form>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>

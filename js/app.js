@@ -1,4 +1,4 @@
-// js/app.js
+// js/app.js — página pública (pedidos a domicilio)
 // Dependencias: supabaseClient (supabase.js), utils.js
 
 let carrito = [];
@@ -7,13 +7,15 @@ let categoriaActual = "all";
 let subcategoriaActual = "";
 let ubicacionActual = "";
 
-// Variables para el mapa
+// Mapa
 let mapInstance = null;
 let marker = null;
 let ubicacionSeleccionadaLatLng = null;
 
-// Referencias a campos del modal
-let modalNombreCliente, modalTelefonoCliente, modalDireccionCliente, modalMetodoPago, modalNotasPedido, modalUbicacionText;
+const NUMERO_WHATSAPP = "5569080488";
+const PASO_KG = 0.25;
+
+const $ = (id) => document.getElementById(id);
 
 function construirItemsPedido() {
   // Solo id y cantidad: el precio real lo toma la base de datos
@@ -23,93 +25,87 @@ function construirItemsPedido() {
   }));
 }
 
-// ======================
-// CARRITO
-// ======================
+function formatoCantidad(item) {
+  return item.tipo_venta === "granel" ? `${Number(item.qty).toFixed(2)} kg` : `${Number(item.qty)}`;
+}
 
-function updateCartBadge() {
-  const badge = document.getElementById('cartCountBadge');
-  if (badge) {
-    const totalItems = carrito.reduce((acc, item) => acc + item.qty, 0);
-    badge.textContent = totalItems;
+function totalCarrito() {
+  return carrito.reduce((acc, item) => acc + Number(item.precio) * Number(item.qty), 0);
+}
+
+function abrirHoja(id) {
+  $(id).style.display = "block";
+  document.body.classList.add("no-scroll");
+}
+
+function cerrarHoja(id) {
+  $(id).style.display = "none";
+  if (![...document.querySelectorAll(".modal, .map-modal")].some(m => m.style.display === "block")) {
+    document.body.classList.remove("no-scroll");
   }
 }
 
+// ======================
+// CARRITO
+// ======================
+function updateCartBadge() {
+  const piezas = carrito.reduce((acc, item) => acc + (item.tipo_venta === "granel" ? 1 : Number(item.qty)), 0);
+  $("cartCountBadge").textContent = piezas;
+  $("cartBarTotal").textContent = formatoDinero(roundUpToHalf(totalCarrito()));
+  $("cartBar").hidden = carrito.length === 0;
+}
+
 function renderCartModal() {
-  const modalBody = document.getElementById('cartModalBody');
-  const modalSubtotalSpan = document.getElementById('modalSubtotal');
-  const modalTotalSpan = document.getElementById('modalTotal');
-  if (!modalBody) return;
+  const body = $("cartModalBody");
+  const subtotal = roundUpToHalf(totalCarrito());
+  $("modalSubtotal").textContent = subtotal.toFixed(2);
+  $("modalTotal").textContent = subtotal.toFixed(2);
 
   if (carrito.length === 0) {
-    modalBody.innerHTML = '<div class="empty-cart">Tu carrito está vacío</div>';
-    if (modalSubtotalSpan) modalSubtotalSpan.textContent = '0.00';
-    if (modalTotalSpan) modalTotalSpan.textContent = '0.00';
+    body.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🛒</div>
+        <div class="empty-title">Tu pedido está vacío</div>
+        <p class="mt-8">Agrega productos del menú.</p>
+      </div>`;
     return;
   }
 
-  let subtotal = 0;
-  const itemsHtml = carrito.map(item => {
-    const precio = Number(item.precio);
-    const cantidad = Number(item.qty);
-    const lineTotal = precio * cantidad;
-    subtotal += lineTotal;
-
-    const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pieza';
-    const step = item.tipo_venta === 'granel' ? 0.01 : 1;
-    const qtyDisplay = item.tipo_venta === 'granel' ? cantidad.toFixed(3) : cantidad;
-
+  body.innerHTML = carrito.map(item => {
+    const esGranel = item.tipo_venta === "granel";
+    const paso = esGranel ? PASO_KG : 1;
     return `
-      <div class="cart-item" data-id="${item.id}">
-        <div class="cart-item-info">
-          <strong>${escapeHtml(item.nombre)}</strong>
-          <small>$${precio.toFixed(2)} / ${unidad}</small>
-          <div class="cart-item-price">$${lineTotal.toFixed(2)}</div>
+      <div class="cart-line">
+        <div class="cl-top">
+          <div>
+            <div class="cl-name">${escapeHtml(item.nombre)}</div>
+            <div class="cl-unit">$${Number(item.precio).toFixed(2)} ${esGranel ? "por kg" : "c/u"}</div>
+          </div>
+          <div class="cl-total">$${(Number(item.precio) * Number(item.qty)).toFixed(2)}</div>
         </div>
-        <div class="qty-controls">
-          <button class="modal-qty-minus" data-id="${item.id}" data-step="${step}">−</button>
-          <span>${qtyDisplay}</span>
-          <button class="modal-qty-plus" data-id="${item.id}" data-step="${step}">+</button>
-          <button class="remove modal-remove" data-id="${item.id}">Quitar</button>
+        <div class="cl-bottom">
+          <div class="stepper">
+            <button type="button" class="modal-qty-minus" data-id="${item.id}" data-step="${paso}" aria-label="Menos">−</button>
+            <span class="stepper-value">${formatoCantidad(item)}</span>
+            <button type="button" class="modal-qty-plus" data-id="${item.id}" data-step="${paso}" aria-label="Más">+</button>
+          </div>
+          <button class="btn btn-text danger modal-remove" data-id="${item.id}"><i class="fa-solid fa-trash-can"></i> Quitar</button>
         </div>
-      </div>
-    `;
-  }).join('');
+      </div>`;
+  }).join("");
 
-  modalBody.innerHTML = itemsHtml;
-  const subtotalRedondeado = roundUpToHalf(subtotal);
-  if (modalSubtotalSpan) modalSubtotalSpan.textContent = subtotalRedondeado.toFixed(2);
-  if (modalTotalSpan) modalTotalSpan.textContent = subtotalRedondeado.toFixed(2);
-
-  // Adjuntar eventos a los botones del modal
-  document.querySelectorAll('.modal-qty-minus').forEach(btn => {
-    btn.removeEventListener('click', handleQtyChange);
-    btn.addEventListener('click', handleQtyChange);
-  });
-  document.querySelectorAll('.modal-qty-plus').forEach(btn => {
-    btn.removeEventListener('click', handleQtyChange);
-    btn.addEventListener('click', handleQtyChange);
-  });
-  document.querySelectorAll('.modal-remove').forEach(btn => {
-    btn.removeEventListener('click', handleRemove);
-    btn.addEventListener('click', handleRemove);
-  });
+  body.querySelectorAll(".modal-qty-minus, .modal-qty-plus").forEach(btn => btn.addEventListener("click", handleQtyChange));
+  body.querySelectorAll(".modal-remove").forEach(btn => btn.addEventListener("click", handleRemove));
 }
 
 function handleQtyChange(e) {
   const btn = e.currentTarget;
-  const id = parseInt(btn.dataset.id);
   const step = parseFloat(btn.dataset.step);
-  const delta = btn.classList.contains('modal-qty-plus') ? step : -step;
-  changeQty(id, delta);
-  renderCartModal(); // refrescar después de cambiar cantidad
+  changeQty(parseInt(btn.dataset.id, 10), btn.classList.contains("modal-qty-plus") ? step : -step);
 }
 
 function handleRemove(e) {
-  const btn = e.currentTarget;
-  const id = parseInt(btn.dataset.id);
-  removeItem(id);
-  renderCartModal();
+  removeItem(parseInt(e.currentTarget.dataset.id, 10));
 }
 
 function renderCarrito() {
@@ -122,20 +118,14 @@ function addToCart(id) {
   if (!producto) return;
 
   let cantidad = 1;
-  if (producto.tipo_venta === 'granel') {
-    const kgInput = document.getElementById(`kg-${id}`);
-    if (kgInput) {
-      let val = parseFloat(kgInput.value);
-      if (isNaN(val) || val <= 0) val = 0.1;
-      cantidad = val;
-    } else {
-      cantidad = 0.1;
-    }
+  if (producto.tipo_venta === "granel") {
+    cantidad = parseFloat($(`kg-${id}`)?.value);
+    if (isNaN(cantidad) || cantidad <= 0) cantidad = 0.5;
   }
 
   const existente = carrito.find(item => item.id === id);
   if (existente) {
-    existente.qty += cantidad;
+    existente.qty = Math.round((Number(existente.qty) + cantidad) * 100) / 100;
   } else {
     carrito.push({
       id: producto.id,
@@ -145,32 +135,33 @@ function addToCart(id) {
       qty: cantidad
     });
   }
-
   renderCarrito();
 
-  const btn = document.querySelector(`button[onclick="addToCart(${id})"]`);
+  // Confirmación visual
+  const btn = $(`add-${id}`);
   if (btn) {
-    btn.classList.add("clicked");
-    setTimeout(() => btn.classList.remove("clicked"), 200);
+    btn.classList.add("btn-dark");
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> ¡Agregado!';
+    setTimeout(() => {
+      btn.classList.remove("btn-dark");
+      btn.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar';
+    }, 900);
   }
+  const bar = $("cartFloatingBtn");
+  bar.classList.remove("bump");
+  void bar.offsetWidth;
+  bar.classList.add("bump");
 }
 
 function changeQty(id, delta) {
   const item = carrito.find(p => p.id === id);
   if (!item) return;
-
-  let newQty = item.qty + delta;
-  if (newQty <= 0) {
+  const nueva = Number(item.qty) + delta;
+  if (nueva <= 0.001) {
     carrito = carrito.filter(p => p.id !== id);
   } else {
-    if (item.tipo_venta === 'granel') {
-      newQty = Math.round(newQty * 100) / 100;
-    } else {
-      newQty = Math.round(newQty);
-    }
-    item.qty = newQty;
+    item.qty = item.tipo_venta === "granel" ? Math.round(nueva * 100) / 100 : Math.round(nueva);
   }
-
   renderCarrito();
 }
 
@@ -182,7 +173,6 @@ function removeItem(id) {
 // ======================
 // PRODUCTOS Y CATEGORÍAS
 // ======================
-
 async function cargarProductos() {
   const { data, error } = await supabaseClient
     .from("productos")
@@ -190,543 +180,388 @@ async function cargarProductos() {
     .order("id", { ascending: true });
 
   if (error) {
+    $("productos").innerHTML = `
+      <div class="empty"><div class="empty-icon">📶</div>
+      <div class="empty-title">No pudimos cargar el menú</div>
+      <p class="mt-8">Revisa tu internet y recarga la página.</p></div>`;
     handleError(error, "Error al cargar productos. Recarga la página.");
     return;
   }
-
   productos = data || [];
   renderProductos();
 }
 
 function renderProductos() {
-  const cont = document.getElementById("productos");
-  if (!cont) return;
+  const cont = $("productos");
 
-  if (!productos.length) {
-    cont.innerHTML = `<div class="hero-card">No hay productos disponibles.</div>`;
-    return;
-  }
-
-  let filtrados = categoriaActual === "all"
-    ? productos
-    : productos.filter(p => p.categoria === categoriaActual);
-
-  if (categoriaActual === "Marisquería" && subcategoriaActual !== "") {
+  let filtrados = categoriaActual === "all" ? productos : productos.filter(p => p.categoria === categoriaActual);
+  if (categoriaActual === "Marisquería" && subcategoriaActual) {
     filtrados = filtrados.filter(p => p.subcategoria === subcategoriaActual);
   }
 
   if (!filtrados.length) {
-    cont.innerHTML = `<div class="hero-card">No hay productos en esta categoría/subcategoría.</div>`;
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">🐟</div><div class="empty-title">No hay productos aquí por ahora</div></div>`;
     return;
   }
 
   cont.innerHTML = filtrados.map(p => {
+    const esGranel = p.tipo_venta === "granel";
+    const precio = Number(p.precio);
     const img = p.imagen_url && p.imagen_url.trim()
-      ? safeUrl(p.imagen_url)
-      : "https://via.placeholder.com/300x200?text=Sin+imagen";
-
-    const tipoVenta = p.tipo_venta === 'granel' ? 'kg' : 'pieza';
-    const descripcion = p.descripcion || (p.tipo_venta === 'granel' ? 'Venta por kg' : 'Venta por pieza');
-    const esGranel = p.tipo_venta === 'granel';
-    const precioPorKg = Number(p.precio);
-
-    let cantidadInputHtml = '';
-    if (esGranel) {
-      cantidadInputHtml = `
-        <div class="quantity-selector">
-          <div class="dual-input-row">
-            <div class="input-group">
-              <input type="number" id="kg-${p.id}" class="qty-input" value="0.1" step="0.01" min="0.01" placeholder="kg">
-              <span class="unit">kg</span>
-            </div>
-            <span class="convert-icon">⇄</span>
-            <div class="input-group">
-              <input type="number" id="price-${p.id}" class="qty-input" value="${(0.1 * precioPorKg).toFixed(2)}" step="0.01" min="0" placeholder="$">
-              <span class="unit">$</span>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-      cantidadInputHtml = '';
-    }
+      ? `<img class="product-img" src="${safeUrl(p.imagen_url)}" alt="${escapeHtml(p.nombre)}" loading="lazy">`
+      : `<div class="product-img thumb-empty">${p.categoria === "Pescadería" ? "🐟" : "🦐"}</div>`;
+    const descripcion = p.descripcion || (esGranel ? "Se vende por kilo" : "");
+    const kgHtml = esGranel ? `
+      <div class="stepper">
+        <button type="button" onclick="ajustarKg(${p.id}, -${PASO_KG})" aria-label="Menos">−</button>
+        <input type="number" id="kg-${p.id}" value="0.5" step="0.05" min="0.05" inputmode="decimal" aria-label="Kilos"
+               oninput="actualizarPrecioKg(${p.id})">
+        <button type="button" onclick="ajustarKg(${p.id}, ${PASO_KG})" aria-label="Más">+</button>
+      </div>
+      <span class="kg-hint">kg · <strong id="price-${p.id}">$${(0.5 * precio).toFixed(2)}</strong></span>` : "";
 
     return `
-      <article class="product-card">
-        <img class="product-image" src="${img}" alt="${escapeHtml(p.nombre)}" loading="lazy">
-        <div class="product-body">
-          <div class="product-category">${escapeHtml(p.categoria)}${p.subcategoria ? ` · ${escapeHtml(p.subcategoria)}` : ''}</div>
+      <article class="product">
+        ${img}
+        <div class="product-info">
+          <div class="product-cat">${escapeHtml(p.subcategoria || p.categoria)}</div>
           <div class="product-name">${escapeHtml(p.nombre)}</div>
-          <div class="product-desc">${escapeHtml(descripcion)}</div>
-          <div class="product-footer">
-            <div class="price">$${Number(p.precio).toFixed(2)} <span class="unit">/ ${tipoVenta}</span></div>
-            ${cantidadInputHtml}
-            <button class="small-btn" onclick="addToCart(${p.id})">Agregar</button>
-          </div>
+          ${descripcion ? `<div class="product-desc">${escapeHtml(descripcion)}</div>` : ""}
+          <div class="product-price">$${precio.toFixed(2)} <small>${esGranel ? "por kg" : "c/u"}</small></div>
         </div>
-      </article>
-    `;
+        <div class="product-actions">
+          ${kgHtml}
+          <button class="btn btn-accent" id="add-${p.id}" onclick="addToCart(${p.id})">
+            <i class="fa-solid fa-plus"></i> Agregar
+          </button>
+        </div>
+      </article>`;
   }).join("");
+}
 
-  filtrados.forEach(p => {
-    if (p.tipo_venta === 'granel') {
-      const kgInput = document.getElementById(`kg-${p.id}`);
-      const priceInput = document.getElementById(`price-${p.id}`);
-      const precioPorKg = Number(p.precio);
+function ajustarKg(id, delta) {
+  const input = $(`kg-${id}`);
+  if (!input) return;
+  let kg = (parseFloat(input.value) || 0) + delta;
+  if (kg < PASO_KG) kg = PASO_KG;
+  input.value = Math.round(kg * 100) / 100;
+  actualizarPrecioKg(id);
+}
 
-      if (kgInput && priceInput) {
-        kgInput.addEventListener('input', (e) => {
-          let kg = parseFloat(e.target.value);
-          if (isNaN(kg) || kg < 0.01) kg = 0.01;
-          const price = kg * precioPorKg;
-          priceInput.value = price.toFixed(2);
-        });
+function actualizarPrecioKg(id) {
+  const p = productos.find(x => x.id === id);
+  const kg = parseFloat($(`kg-${id}`)?.value) || 0;
+  const el = $(`price-${id}`);
+  if (p && el) el.textContent = `$${(kg * Number(p.precio)).toFixed(2)}`;
+}
 
-        priceInput.addEventListener('input', (e) => {
-          let price = parseFloat(e.target.value);
-          if (isNaN(price) || price < 0) price = 0;
-          let kg = price / precioPorKg;
-          if (kg < 0.01) kg = 0.01;
-          kgInput.value = kg.toFixed(3);
-        });
-      }
-    }
-  });
+function renderSubcategorias() {
+  const bar = $("subcategoriaBar");
+  if (categoriaActual !== "Marisquería") {
+    bar.style.display = "none";
+    return;
+  }
+  const subcats = [...new Set(productos.filter(p => p.categoria === "Marisquería").map(p => p.subcategoria).filter(Boolean))];
+  bar.innerHTML = [""].concat(subcats).map(s => `
+    <button class="chip subcat-btn ${s === subcategoriaActual ? "active" : ""}" data-sub="${escapeHtml(s)}">${s ? escapeHtml(s) : "Todas"}</button>`).join("");
+  bar.querySelectorAll(".subcat-btn").forEach(btn => btn.addEventListener("click", () => switchSubcategoria(btn.dataset.sub)));
+  bar.style.display = "flex";
 }
 
 function switchCategory(categoria) {
   categoriaActual = categoria;
   subcategoriaActual = "";
+  $("btnAll").classList.toggle("active", categoria === "all");
+  $("btnPescaderia").classList.toggle("active", categoria === "Pescadería");
+  $("btnMarisqueria").classList.toggle("active", categoria === "Marisquería");
+  renderSubcategorias();
   updateSubcategoryMessage();
-
-  const btnAll = document.getElementById("btnAll");
-  const btnPescaderia = document.getElementById("btnPescaderia");
-  const btnMarisqueria = document.getElementById("btnMarisqueria");
-  const subBar = document.getElementById("subcategoriaBar");
-
-  if (btnAll) btnAll.classList.remove("active");
-  if (btnPescaderia) btnPescaderia.classList.remove("active");
-  if (btnMarisqueria) btnMarisqueria.classList.remove("active");
-
-  if (categoria === "all" && btnAll) btnAll.classList.add("active");
-  if (categoria === "Pescadería" && btnPescaderia) btnPescaderia.classList.add("active");
-  if (categoria === "Marisquería" && btnMarisqueria) btnMarisqueria.classList.add("active");
-
-  if (categoria === "Marisquería") {
-    subBar.style.display = "flex";
-    document.querySelectorAll('.subcat-btn').forEach(btn => btn.classList.remove('active'));
-    const firstSubBtn = document.querySelector('.subcat-btn:first-child');
-    if (firstSubBtn) firstSubBtn.classList.add('active');
-  } else {
-    subBar.style.display = "none";
-  }
-
   renderProductos();
 }
 
 function switchSubcategoria(subcat) {
   subcategoriaActual = subcat;
-  document.querySelectorAll('.subcat-btn').forEach(btn => {
-    btn.classList.remove('active');
-  });
-  if (subcat === "") {
-    const firstBtn = document.querySelector('.subcat-btn:first-child');
-    if (firstBtn) firstBtn.classList.add('active');
-  } else {
-    const btns = document.querySelectorAll('.subcat-btn');
-    for (let btn of btns) {
-      if (btn.textContent.trim() === subcat) {
-        btn.classList.add('active');
-        break;
-      }
-    }
-  }
+  renderSubcategorias();
   updateSubcategoryMessage();
   renderProductos();
 }
 
 function updateSubcategoryMessage() {
-  const messageDiv = document.getElementById("subcategoryMessage");
-  const messageContent = messageDiv?.querySelector(".message-content");
-  if (!messageDiv || !messageContent) return;
-
-  const specialSubcats = ["Mojarras", "Camarones", "Filetes"];
-  const subcat = subcategoriaActual;
-
-  if (specialSubcats.includes(subcat)) {
-    let texto = "";
-    if (subcat === "Mojarras") texto = "Las Mojarras Incluyen: Ensalada de Frutos Rojos y Papas a la Francesa";
-    else if (subcat === "Camarones") texto = "Los Camarones Incluyen: Ensalada de Frutos Rojos y Papas a la Francesa";
-    else if (subcat === "Filetes") texto = "Los Filetes Incluyen: Ensalada de Frutos Rojos y Papas a la Francesa";
-
-    messageContent.textContent = texto;
-    messageDiv.style.display = "block";
-  } else {
-    messageDiv.style.display = "none";
-  }
+  const messageDiv = $("subcategoryMessage");
+  const textos = {
+    Mojarras: "Las mojarras incluyen ensalada de frutos rojos y papas a la francesa.",
+    Camarones: "Los camarones incluyen ensalada de frutos rojos y papas a la francesa.",
+    Filetes: "Los filetes incluyen ensalada de frutos rojos y papas a la francesa."
+  };
+  const texto = textos[subcategoriaActual];
+  messageDiv.querySelector(".message-content").textContent = texto || "";
+  messageDiv.style.display = texto ? "flex" : "none";
 }
 
 // ======================
-// UBICACIÓN Y FORMULARIO
+// UBICACIÓN
 // ======================
+function marcarUbicacion(lat, lng, texto) {
+  ubicacionActual = `https://www.google.com/maps?q=${lat},${lng}`;
+  const el = $("ubicacion");
+  el.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${escapeHtml(texto)}`;
+  el.classList.add("ok");
+}
 
 function obtenerUbicacion() {
-  const modalBtn = document.getElementById('modalUbicacionBtn');
-  if (modalBtn) {
-    modalBtn.classList.add("clicked");
-    setTimeout(() => modalBtn.classList.remove("clicked"), 200);
-  }
-
   if (!navigator.geolocation) {
-    showToast("Tu navegador no permite obtener ubicación.");
+    showToast("Tu celular no permite compartir la ubicación. Usa \"Elegir en mapa\".");
     return;
   }
+  const btn = $("modalUbicacionBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Buscando…';
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      ubicacionActual = `https://www.google.com/maps?q=${lat},${lng}`;
-      const ubicacionEl = document.getElementById("ubicacion");
-      if (ubicacionEl) ubicacionEl.textContent = "Ubicación capturada correctamente.";
-      if (modalUbicacionText) modalUbicacionText.textContent = "Ubicación capturada correctamente.";
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Mi ubicación';
+      marcarUbicacion(pos.coords.latitude, pos.coords.longitude, "Ubicación lista");
     },
-    (err) => {
-      handleError(err, "No se pudo obtener la ubicación. Revisa permisos.");
+    () => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-location-crosshairs"></i> Mi ubicación';
+      showToast("No pudimos obtener tu ubicación. Activa el GPS o usa \"Elegir en mapa\".");
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
 }
 
-// Funciones del mapa (nuevas)
 function abrirMapModal() {
-  const modal = document.getElementById('mapModal');
-  modal.style.display = 'block';
-  document.body.style.overflow = 'hidden';
+  $("mapModal").style.display = "block";
+  document.body.classList.add("no-scroll");
 
   if (!mapInstance) {
-    // Centro por defecto: Ixtapaluca (ajústalo si quieres)
-    mapInstance = L.map('map').setView([19.319, -98.882], 13);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CartoDB'
+    mapInstance = L.map("map").setView([19.319, -98.882], 14);   // Ixtapaluca
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; CARTO'
     }).addTo(mapInstance);
-
-    mapInstance.on('click', function(e) {
-      if (marker) marker.remove();
-      marker = L.marker(e.latlng).addTo(mapInstance);
-      ubicacionSeleccionadaLatLng = e.latlng;
-    });
-  } else {
-    mapInstance.invalidateSize();
+    mapInstance.on("click", (e) => ponerMarcador(e.latlng));
   }
+  setTimeout(() => mapInstance.invalidateSize(), 150);
+}
+
+function ponerMarcador(latlng) {
+  if (marker) marker.remove();
+  marker = L.marker(latlng).addTo(mapInstance);
+  ubicacionSeleccionadaLatLng = latlng;
 }
 
 function cerrarMapModal() {
-  document.getElementById('mapModal').style.display = 'none';
-  document.body.style.overflow = 'auto';
+  cerrarHoja("mapModal");
 }
 
 async function buscarDireccion() {
-  const query = document.getElementById('searchAddress').value.trim();
+  const query = $("searchAddress").value.trim();
   if (!query) {
-    showToast('Escribe una dirección para buscar');
+    showToast("Escribe tu calle o colonia para buscar.");
     return;
   }
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&addressdetails=1`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=mx&q=${encodeURIComponent(query + ", Estado de México")}&limit=1`;
   try {
     const res = await fetch(url);
     const data = await res.json();
     if (data && data.length > 0) {
-      const { lat, lon } = data[0];
-      const latlng = L.latLng(parseFloat(lat), parseFloat(lon));
-      mapInstance.setView(latlng, 15);
-      if (marker) marker.remove();
-      marker = L.marker(latlng).addTo(mapInstance);
-      ubicacionSeleccionadaLatLng = latlng;
+      const latlng = L.latLng(parseFloat(data[0].lat), parseFloat(data[0].lon));
+      mapInstance.setView(latlng, 17);
+      ponerMarcador(latlng);
     } else {
-      showToast('No se encontró esa dirección. Intenta con otro término.');
+      showToast("No encontramos esa dirección. Prueba con otra o toca el mapa.");
     }
   } catch (err) {
-    handleError(err, 'Error al buscar la dirección');
+    handleError(err, "No se pudo buscar la dirección.");
   }
 }
 
 function confirmarUbicacionMapa() {
   if (!ubicacionSeleccionadaLatLng) {
-    showToast('Selecciona un punto en el mapa primero');
+    showToast("Toca el mapa para marcar dónde está tu casa.");
     return;
   }
-  const lat = ubicacionSeleccionadaLatLng.lat;
-  const lng = ubicacionSeleccionadaLatLng.lng;
-  ubicacionActual = `https://www.google.com/maps?q=${lat},${lng}`;
-  const ubicacionEl = document.getElementById('ubicacion');
-  if (ubicacionEl) ubicacionEl.textContent = 'Ubicación seleccionada manualmente ✅';
+  marcarUbicacion(ubicacionSeleccionadaLatLng.lat, ubicacionSeleccionadaLatLng.lng, "Ubicación marcada en el mapa");
   cerrarMapModal();
 }
 
-// Validación y envío desde el modal
+// ======================
+// VALIDACIÓN Y ENVÍO
+// ======================
+function getMetodoPago() {
+  return document.querySelector('input[name="metodoPago"]:checked')?.value || "";
+}
+
+function getTelefono() {
+  return $("modalTelefonoCliente").value.replace(/\D/g, "");
+}
+
 function clearModalErrors() {
-  const fields = ["modalNombreCliente", "modalTelefonoCliente", "modalDireccionCliente", "modalMetodoPago"];
-  fields.forEach(id => {
-    const input = document.getElementById(id);
-    const error = document.getElementById(`error-${id}`);
-    if (input) {
-      input.classList.remove("input-error", "input-success");
-    }
+  ["modalNombreCliente", "modalTelefonoCliente", "modalDireccionCliente", "modalMetodoPago"].forEach(id => {
+    $(id)?.classList.remove("input-error", "input-success");
+    const error = $(`error-${id}`);
     if (error) error.textContent = "";
   });
 }
 
 function setModalError(id, message) {
-  const input = document.getElementById(id);
-  const error = document.getElementById(`error-${id}`);
-  if (input) input.classList.add("input-error");
+  $(id)?.classList.add("input-error");
+  const error = $(`error-${id}`);
   if (error) error.textContent = message;
-}
-
-function setModalSuccess(id) {
-  const input = document.getElementById(id);
-  if (input) input.classList.add("input-success");
 }
 
 function validateModalForm() {
   clearModalErrors();
+  const errores = [];
 
-  let valid = true;
-
-  const nombre = modalNombreCliente ? modalNombreCliente.value.trim() : "";
-  const telefono = modalTelefonoCliente ? modalTelefonoCliente.value.trim() : "";
-  const direccion = modalDireccionCliente ? modalDireccionCliente.value.trim() : "";
-  const metodoPago = modalMetodoPago ? modalMetodoPago.value : "";
-
-  const phoneRegex = /^[0-9]{10,15}$/;
-
-  if (nombre.length < 3) {
-    setModalError("modalNombreCliente", "Escribe un nombre válido de al menos 3 letras.");
-    valid = false;
-  } else {
-    setModalSuccess("modalNombreCliente");
+  if (!carrito.length) errores.push(["", "Tu pedido está vacío."]);
+  if (!ubicacionActual) errores.push(["ubicacion", "Marca tu ubicación con \"Mi ubicación\" o \"Elegir en mapa\"."]);
+  if ($("modalDireccionCliente").value.trim().length < 8) {
+    errores.push(["modalDireccionCliente", "Escribe tu dirección completa (calle, número y colonia)."]);
   }
+  if ($("modalNombreCliente").value.trim().length < 3) errores.push(["modalNombreCliente", "Escribe tu nombre."]);
+  if (!/^[0-9]{10,15}$/.test(getTelefono())) errores.push(["modalTelefonoCliente", "Escribe tu teléfono de 10 dígitos."]);
+  if (!getMetodoPago()) errores.push(["modalMetodoPago", "Elige cómo vas a pagar."]);
 
-  if (!phoneRegex.test(telefono)) {
-    setModalError("modalTelefonoCliente", "Escribe un número válido de 10 a 15 dígitos, sin espacios ni letras.");
-    valid = false;
-  } else {
-    setModalSuccess("modalTelefonoCliente");
+  errores.forEach(([id, msg]) => { if (id && id !== "ubicacion") setModalError(id, msg); });
+
+  if (errores.length) {
+    showToast(errores[0][1]);
+    const primero = errores[0][0] && $(errores[0][0]);
+    primero?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
   }
-
-  if (direccion.length < 8) {
-    setModalError("modalDireccionCliente", "La dirección debe ser más completa.");
-    valid = false;
-  } else {
-    setModalSuccess("modalDireccionCliente");
-  }
-
-  if (!metodoPago) {
-    setModalError("modalMetodoPago", "Selecciona un método de pago.");
-    valid = false;
-  } else {
-    setModalSuccess("modalMetodoPago");
-  }
-
-  if (!ubicacionActual) {
-    showToast("Primero debes capturar tu ubicación.");
-    valid = false;
-  }
-
-  if (!carrito.length) {
-    showToast("Tu carrito está vacío.");
-    valid = false;
-  }
-
-  return valid;
+  return true;
 }
 
 async function enviarPedidoDesdeModal() {
   if (!validateModalForm()) return;
 
-  const nombre = modalNombreCliente ? modalNombreCliente.value.trim() : "";
-  const telefono = modalTelefonoCliente ? modalTelefonoCliente.value.trim() : "";
-  const direccion = modalDireccionCliente ? modalDireccionCliente.value.trim() : "";
-  const metodoPago = modalMetodoPago ? modalMetodoPago.value : "";
-  const notas = modalNotasPedido ? modalNotasPedido.value.trim() : "";
+  const nombre = $("modalNombreCliente").value.trim();
+  const telefono = getTelefono();
+  const direccion = $("modalDireccionCliente").value.trim();
+  const metodoPago = getMetodoPago();
+  const notas = $("modalNotasPedido").value.trim();
 
-  // El número de pedido, los precios y el total los calcula la base de datos
-  const { data: pedido, error } = await supabaseClient.rpc("crear_pedido_domicilio", {
-    p_nombre: nombre,
-    p_telefono: telefono,
-    p_direccion: direccion,
-    p_metodo_pago: metodoPago,
-    p_ubicacion: ubicacionActual,
-    p_notas: notas || null,
-    p_items: construirItemsPedido()
-  });
+  const btn = $("modalEnviarPedido");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando…';
 
-  if (error) {
-    handleError(error, "No se pudo guardar el pedido. Intenta de nuevo.");
-    return;
+  try {
+    // El número de pedido, los precios y el total los calcula la base de datos
+    const { data: pedido, error } = await supabaseClient.rpc("crear_pedido_domicilio", {
+      p_nombre: nombre,
+      p_telefono: telefono,
+      p_direccion: direccion,
+      p_metodo_pago: metodoPago,
+      p_ubicacion: ubicacionActual,
+      p_notas: notas || null,
+      p_items: construirItemsPedido()
+    });
+
+    if (error) {
+      handleError(error, "No se pudo enviar el pedido. Inténtalo de nuevo.");
+      return;
+    }
+
+    let mensaje = `🐟 *FishMar Pedido*\n\n`;
+    mensaje += `🧾 *Pedido:* ${pedido.numero_pedido}\n`;
+    mensaje += `👤 *Nombre:* ${nombre}\n`;
+    mensaje += `📞 *Teléfono:* ${telefono}\n`;
+    mensaje += `📍 *Dirección:* ${direccion}\n`;
+    mensaje += `💳 *Pago:* ${metodoPago}\n\n`;
+    mensaje += `🛒 *Productos:*\n`;
+    pedido.items.forEach(item => {
+      const unidad = item.tipo_venta === "granel" ? "kg" : "pz";
+      const qtyDisplay = item.tipo_venta === "granel" ? Number(item.qty).toFixed(2) : item.qty;
+      mensaje += `• ${item.nombre} ${qtyDisplay} ${unidad} - $${(Number(item.precio) * Number(item.qty)).toFixed(2)}\n`;
+    });
+    mensaje += `\n🧾 *Subtotal:* $${Number(pedido.subtotal).toFixed(2)}\n`;
+    mensaje += `🚚 *Envío:* GRATIS\n`;
+    mensaje += `💰 *Total redondeado:* $${Number(pedido.total).toFixed(2)}\n`;
+    if (notas) mensaje += `📝 *Notas:* ${notas}\n`;
+    mensaje += `\n📍 *Ubicación:* ${ubicacionActual}`;
+
+    const url = `https://wa.me/52${NUMERO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, "_blank");
+
+    // Limpiar todo y mostrar confirmación
+    carrito = [];
+    renderCarrito();
+    ["modalNombreCliente", "modalTelefonoCliente", "modalDireccionCliente", "modalNotasPedido"].forEach(id => { $(id).value = ""; });
+    document.querySelectorAll('input[name="metodoPago"]').forEach(r => { r.checked = false; });
+    ubicacionActual = "";
+    $("ubicacion").textContent = "Todavía no marcas tu ubicación.";
+    $("ubicacion").classList.remove("ok");
+    clearModalErrors();
+
+    closeCartModal();
+    $("exitoNumero").textContent = pedido.numero_pedido;
+    $("exitoWhatsApp").href = url;
+    abrirHoja("modalExito");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-brands fa-whatsapp"></i> Enviar pedido';
   }
+}
 
-  let mensaje = `🐟 *FishMar Pedido*\n\n`;
-  mensaje += `🧾 *Pedido:* ${pedido.numero_pedido}\n`;
-  mensaje += `👤 *Nombre:* ${nombre}\n`;
-  mensaje += `📞 *Teléfono:* ${telefono}\n`;
-  mensaje += `📍 *Dirección:* ${direccion}\n`;
-  mensaje += `💳 *Pago:* ${metodoPago}\n\n`;
-  mensaje += `🛒 *Productos:*\n`;
-
-  pedido.items.forEach(item => {
-    const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pz';
-    const qtyDisplay = item.tipo_venta === 'granel' ? Number(item.qty).toFixed(2) : item.qty;
-    mensaje += `• ${item.nombre} ${qtyDisplay} ${unidad} - $${(Number(item.precio) * Number(item.qty)).toFixed(2)}\n`;
-  });
-
-  mensaje += `\n🧾 *Subtotal:* $${Number(pedido.subtotal).toFixed(2)}\n`;
-  mensaje += `🚚 *Envío:* GRATIS\n`;
-  mensaje += `💰 *Total redondeado:* $${Number(pedido.total).toFixed(2)}\n`;
-
-  if (notas) mensaje += `📝 *Notas:* ${notas}\n`;
-  if (ubicacionActual) mensaje += `\n📍 *Ubicación:* ${ubicacionActual}`;
-
-  const numeroWhatsApp = "5569080488";
-  const url = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
-
-  window.open(url, "_blank");
-
-  carrito = [];
-  renderCarrito();
-
-  if (modalNombreCliente) modalNombreCliente.value = "";
-  if (modalTelefonoCliente) modalTelefonoCliente.value = "";
-  if (modalDireccionCliente) modalDireccionCliente.value = "";
-  if (modalMetodoPago) modalMetodoPago.value = "";
-  if (modalNotasPedido) modalNotasPedido.value = "";
-  if (modalUbicacionText) modalUbicacionText.textContent = "Sin ubicación capturada.";
-
-  ubicacionActual = "";
-  clearModalErrors();
-
-  showToast("Pedido enviado con éxito", "success");
-  closeCartModal();
+function cerrarExito() {
+  cerrarHoja("modalExito");
 }
 
 // ======================
-// CARRITO FLOTANTE Y MODAL
+// HOJA DEL CARRITO
 // ======================
-
 function openCartModal() {
-  const modal = document.getElementById('cartModal');
-  if (!modal) return;
-  renderCartModal(); // actualizar contenido antes de mostrar
-  modal.style.display = 'block';
-  document.body.style.overflow = 'hidden';
+  renderCartModal();
+  abrirHoja("cartModal");
 }
 
 function closeCartModal() {
-  const modal = document.getElementById('cartModal');
-  if (!modal) return;
-  modal.style.display = 'none';
-  document.body.style.overflow = 'auto';
+  cerrarHoja("cartModal");
 }
 
-// Eventos
-const cartFloatingBtn = document.getElementById('cartFloatingBtn');
-const closeModalBtn = document.querySelector('.close-modal');
-if (cartFloatingBtn) cartFloatingBtn.addEventListener('click', openCartModal);
-if (closeModalBtn) closeModalBtn.addEventListener('click', closeCartModal);
-window.addEventListener('click', (e) => {
-  const modal = document.getElementById('cartModal');
-  if (e.target === modal) closeCartModal();
-});
+$("cartFloatingBtn").addEventListener("click", openCartModal);
+$("closeCartBtn").addEventListener("click", closeCartModal);
+$("cartModal").addEventListener("click", (e) => { if (e.target.id === "cartModal") closeCartModal(); });
+$("searchAddress").addEventListener("keydown", (e) => { if (e.key === "Enter") buscarDireccion(); });
 
 // ======================
 // CARRUSEL
 // ======================
 let currentSlide = 0;
-const slides = document.querySelectorAll('.carousel-slide');
-const dotsContainer = document.querySelector('.carousel-dots');
+const slides = document.querySelectorAll(".carousel-slide");
+const dotsContainer = document.querySelector(".carousel-dots");
 let interval;
-let isHovering = false;
-
-function createDots() {
-  slides.forEach((_, idx) => {
-    const dot = document.createElement('span');
-    dot.classList.add('dot');
-    if (idx === 0) dot.classList.add('active');
-    dot.addEventListener('click', () => goToSlide(idx));
-    dotsContainer.appendChild(dot);
-  });
-}
-function updateDots() {
-  document.querySelectorAll('.dot').forEach((dot, idx) => {
-    dot.classList.toggle('active', idx === currentSlide);
-  });
-}
 
 function showSlide(index) {
-  slides.forEach((slide, i) => {
-    slide.classList.toggle('active', i === index);
-  });
-  updateDots();
-}
-
-function nextSlide() {
-  currentSlide = (currentSlide + 1) % slides.length;
-  showSlide(currentSlide);
-  resetInterval();
-}
-
-function prevSlide() {
-  currentSlide = (currentSlide - 1 + slides.length) % slides.length;
-  showSlide(currentSlide);
-  resetInterval();
+  slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+  document.querySelectorAll(".carousel-dots .dot").forEach((dot, i) => dot.classList.toggle("active", i === index));
 }
 
 function goToSlide(index) {
-  currentSlide = index;
+  currentSlide = (index + slides.length) % slides.length;
   showSlide(currentSlide);
-  resetInterval();
-}
-
-function startAutoSlide() {
-  interval = setInterval(() => {
-    if (!isHovering) nextSlide();
-  }, 5000);
-}
-
-function resetInterval() {
   clearInterval(interval);
-  startAutoSlide();
-}
-
-function pauseOnHover() {
-  const carousel = document.querySelector('.promo-carousel');
-  carousel.addEventListener('mouseenter', () => isHovering = true);
-  carousel.addEventListener('mouseleave', () => isHovering = false);
+  interval = setInterval(() => goToSlide(currentSlide + 1), 5000);
 }
 
 if (slides.length) {
-  createDots();
-  showSlide(0);
-  startAutoSlide();
-  pauseOnHover();
+  slides.forEach((_, idx) => {
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.addEventListener("click", () => goToSlide(idx));
+    dotsContainer.appendChild(dot);
+  });
+  goToSlide(0);
 }
-
-document.querySelector('.carousel-control.prev')?.addEventListener('click', prevSlide);
-document.querySelector('.carousel-control.next')?.addEventListener('click', nextSlide);
+document.querySelector(".carousel-control.prev")?.addEventListener("click", () => goToSlide(currentSlide - 1));
+document.querySelector(".carousel-control.next")?.addEventListener("click", () => goToSlide(currentSlide + 1));
 
 // ======================
-// INICIALIZACIÓN
+// INICIO
 // ======================
-function initModalReferences() {
-  modalNombreCliente = document.getElementById('modalNombreCliente');
-  modalTelefonoCliente = document.getElementById('modalTelefonoCliente');
-  modalDireccionCliente = document.getElementById('modalDireccionCliente');
-  modalMetodoPago = document.getElementById('modalMetodoPago');
-  modalNotasPedido = document.getElementById('modalNotasPedido');
-  modalUbicacionText = document.getElementById('modalUbicacionText');
-}
-
-initModalReferences();
 cargarProductos();
 renderCarrito();

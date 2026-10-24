@@ -1,77 +1,87 @@
+// js/dashboard.js — panel de administración
+// Dependencias: supabaseClient (supabase.js), utils.js, Chart.js
 
-// js/dashboard.js
-// Dependencias: supabaseClient (supabase.js), utils.js
-
-let pedidosCache = [];           // Solo pedidos a domicilio (para listado)
-let todosPedidosCache = [];      // Online + locales cerrados (para métricas)
+let pedidosCache = [];           // Pedidos a domicilio (para la lista)
+let todosPedidosCache = [];      // Domicilio + mesas cobradas (para ventas)
 let productosCache = [];
 let repartidoresCache = [];
-let chart = null;
+let ventasLocalCache = [];
+let pedidoLocalAEliminar = null;
 let productoEditandoId = null;
-let ultimoPedidoId = null;
-let ventasLocalCache = [];          // Para almacenar pedidos locales cerrados
-let pedidoLocalAEliminar = null;    // Para eliminar con modal
 
-// Variables para descuento en edición
-let descuentoValorActual = 0;
-let descuentoTipoActual = 'monto';
-let descuentoMontoActual = 0;
-
-// Variables para filtro de productos
-let productosFiltrados = [];
-let searchProductoTerm = '';
-let categoriaProductoFilter = 'all';
-
-// Variables para métricas
-let periodoActual = 'hoy';
+// Filtros
+let filtroEstadoActual = "Pendientes";
+let categoriaProductoFilter = "all";
+let periodoActual = "hoy";
 let fechaInicioPersonalizado = null;
 let fechaFinPersonalizado = null;
+
+// Para no redibujar si nada cambió (y no cerrar listas abiertas)
+let firmaPedidos = "";
+let idsConocidos = null;
+
+// Descuento en edición de pedido
+let pedidoEditando = null;
+let productosEditables = [];
+let descuentoValorActual = 0;
+let descuentoTipoActual = "monto";
+
+// Gráficas
 let chartIngresos = null;
 let chartVentasDia = null;
 
-// Variables para super admin
+// Super admin
 let esSuperAdmin = false;
 let listaUsuarios = [];
 
+let pedidoWhatsApp = null;
+
 const audio = new Audio("assets/notification.mp3");
+const $ = (id) => document.getElementById(id);
 
 // ======================
-// UTILIDADES GENERALES
+// UTILIDADES
 // ======================
+function abrirHoja(id) {
+  $(id).style.display = "block";
+  document.body.classList.add("no-scroll");
+}
+
+function cerrarHoja(id) {
+  $(id).style.display = "none";
+  if (![...document.querySelectorAll(".modal")].some(m => m.style.display === "block")) {
+    document.body.classList.remove("no-scroll");
+  }
+}
 
 function reproducirNotificacion() {
   audio.play().catch(() => {});
   const alerta = document.createElement("div");
   alerta.className = "alerta-pedido";
-  alerta.innerHTML = "🆕 Nuevo pedido recibido";
+  alerta.innerHTML = '<i class="fa-solid fa-bell"></i> ¡Llegó un pedido nuevo!';
   document.body.appendChild(alerta);
-  setTimeout(() => alerta.remove(), 3000);
-}
-
-function getRepartidorNombrePorId(userId) {
-  const rep = repartidoresCache.find(r => r.user_id === userId);
-  return rep?.full_name || "";
+  setTimeout(() => alerta.remove(), 4000);
 }
 
 function getRepartidorTextoPedido(p) {
-  if (p.repartidor_nombre && p.repartidor_nombre.trim()) {
-    return p.repartidor_nombre;
-  }
+  if (p.repartidor_nombre && p.repartidor_nombre.trim()) return p.repartidor_nombre;
   if (p.repartidor_id) {
-    const nombre = getRepartidorNombrePorId(p.repartidor_id);
-    if (nombre) return nombre;
+    const rep = repartidoresCache.find(r => r.user_id === p.repartidor_id);
+    if (rep?.full_name) return rep.full_name;
   }
   return "Sin asignar";
 }
 
-// ======================
-// VERIFICACIÓN DE SESIÓN
-// ======================
+function cantidadTexto(item) {
+  return item.tipo_venta === "granel" ? `${Number(item.qty).toFixed(2)} kg` : `${Number(item.qty)}×`;
+}
 
+// ======================
+// SESIÓN
+// ======================
 async function verificarSesionAdmin() {
   const { data, error } = await supabaseClient.auth.getUser();
   if (error || !data?.user) {
-    showToast("No hay sesión activa. Redirigiendo al login.");
     window.location.href = "admin.html";
     return false;
   }
@@ -80,13 +90,8 @@ async function verificarSesionAdmin() {
     .select("role, is_superadmin")
     .eq("user_id", data.user.id)
     .single();
-  if (rolError || !rolData) {
-    showToast("No se pudo verificar tu rol.");
-    window.location.href = "admin.html";
-    return false;
-  }
-  if (rolData.role !== "admin" && rolData.role !== "superadmin") {
-    showToast("No tienes permisos de administrador.");
+  if (rolError || !rolData || (rolData.role !== "admin" && rolData.role !== "superadmin" && !rolData.is_superadmin)) {
+    showToast("Esta pantalla es solo para administradores.");
     window.location.href = "admin.html";
     return false;
   }
@@ -94,222 +99,14 @@ async function verificarSesionAdmin() {
   return true;
 }
 
-// ======================
-// PRODUCTOS (CRUD)
-// ======================
-
-async function cargarProductosAdmin() {
-  const { data, error } = await supabaseClient
-    .from("productos")
-    .select("*")
-    .order("id", { ascending: false });
-  if (error) {
-    handleError(error, "Error al cargar productos.");
-    return;
-  }
-  productosCache = data || [];
-  filtrarProductos();
-}
-
-function filtrarProductos() {
-  searchProductoTerm = document.getElementById("searchProducto")?.value.toLowerCase() || '';
-  categoriaProductoFilter = document.getElementById("filtroCategoriaProducto")?.value || 'all';
-  
-  productosFiltrados = productosCache.filter(p => {
-    const matchesSearch = p.nombre.toLowerCase().includes(searchProductoTerm);
-    const matchesCategoria = categoriaProductoFilter === 'all' || p.categoria === categoriaProductoFilter;
-    return matchesSearch && matchesCategoria;
-  });
-  
-  renderProductosAdmin(productosFiltrados);
-}
-
-function renderProductosAdmin(productos) {
-  const cont = document.getElementById("productosAdmin");
-  if (!cont) return;
-  if (!productos.length) {
-    cont.innerHTML = `<div class="panel">No hay productos que coincidan.</div>`;
-    return;
-  }
-  cont.innerHTML = productos.map(p => {
-    const img = p.imagen_url && p.imagen_url.trim() ? safeUrl(p.imagen_url) : "https://via.placeholder.com/100";
-    const tipoVenta = p.tipo_venta === 'granel' ? 'kg' : 'pieza';
-    const subcategoriaHtml = p.subcategoria ? `<small class="subcat">${escapeHtml(p.subcategoria)}</small>` : '';
-    return `
-      <div class="admin-item">
-        <img src="${img}" alt="${escapeHtml(p.nombre)}">
-        <div>
-          <strong>${escapeHtml(p.nombre)}</strong>
-          <p>$${Number(p.precio).toFixed(2)} / ${tipoVenta}</p>
-          <small>${escapeHtml(p.categoria)}</small> ${subcategoriaHtml}
-          <p class="product-desc-small">${escapeHtml(p.descripcion || 'Sin descripción')}</p>
-          <div class="admin-actions">
-            <button class="edit-btn" onclick="editarProducto(event, ${p.id})">Editar</button>
-            <button class="delete-btn" onclick="eliminarProducto(event, ${p.id})">Eliminar</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-async function crearProducto() {
-  const nombre = document.getElementById("nombre").value.trim();
-  const precio = parseFloat(document.getElementById("precio").value);
-  const categoria = document.getElementById("categoria").value;
-  const imagen_url = document.getElementById("imagen_url").value.trim();
-  const descripcion = document.getElementById("descripcion").value.trim();
-  const tipoVenta = document.getElementById("tipoVenta").value;
-  let subcategoria = null;
-  if (categoria === "Marisquería") {
-    subcategoria = document.getElementById("subcategoria").value;
-    if (!subcategoria) {
-      showToast("Selecciona una subcategoría para Marisquería");
-      return;
-    }
-  }
-  if (!nombre || isNaN(precio)) {
-    showToast("Completa nombre y precio");
-    return;
-  }
-
-  const nuevoProducto = {
-    nombre,
-    precio,
-    categoria,
-    imagen_url: imagen_url || null,
-    descripcion: descripcion || null,
-    tipo_venta: tipoVenta,
-    subcategoria
-  };
-
-  if (productoEditandoId) {
-    const { error } = await supabaseClient
-      .from("productos")
-      .update(nuevoProducto)
-      .eq("id", productoEditandoId);
-    if (error) {
-      handleError(error, "Error al editar producto.");
-      return;
-    }
-    productoEditandoId = null;
-    showToast("Producto actualizado correctamente", "success");
-  } else {
-    const { error } = await supabaseClient
-      .from("productos")
-      .insert([nuevoProducto]);
-    if (error) {
-      handleError(error, "Error al crear producto.");
-      return;
-    }
-    showToast("Producto creado correctamente", "success");
-  }
-
-  limpiarFormulario();
-  await cargarProductosAdmin();
-}
-
-function editarProducto(event, id) {
-  const btn = event.target;
-  if (btn) {
-    btn.classList.add('clicked');
-    setTimeout(() => btn.classList.remove('clicked'), 200);
-  }
-
-  const p = productosCache.find(x => x.id === id);
-  if (!p) return;
-
-  document.getElementById("nombre").value = p.nombre || "";
-  document.getElementById("precio").value = p.precio || "";
-  document.getElementById("categoria").value = p.categoria || "Pescadería";
-  document.getElementById("imagen_url").value = p.imagen_url || "";
-  document.getElementById("descripcion").value = p.descripcion || "";
-  document.getElementById("tipoVenta").value = p.tipo_venta || "pieza";
-  document.getElementById("previewImg").src = p.imagen_url || "";
-
-  toggleSubcategoria();
-  if (p.categoria === "Marisquería") {
-    document.getElementById("subcategoria").value = p.subcategoria || "";
-  } else {
-    document.getElementById("subcategoria").value = "";
-  }
-
-  productoEditandoId = id;
-
-  const formPanel = document.getElementById("productFormPanel");
-  if (formPanel) {
-    formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    formPanel.style.transition = 'box-shadow 0.3s';
-    formPanel.style.boxShadow = '0 0 0 4px #0ea5a4';
-    setTimeout(() => {
-      formPanel.style.boxShadow = '';
-    }, 1500);
-  }
-}
-
-async function eliminarProducto(event, id) {
-  const btn = event.target;
-  if (btn) {
-    btn.classList.add('clicked');
-    setTimeout(() => btn.classList.remove('clicked'), 200);
-  }
-
-  if (!confirm("¿Eliminar producto? Esta acción no se puede deshacer.")) return;
-
-  const { error } = await supabaseClient.from("productos").delete().eq("id", id);
-  if (error) {
-    handleError(error, "Error eliminando producto.");
-    return;
-  }
-
-  showToast("Producto eliminado correctamente", "success");
-  cargarProductosAdmin();
-}
-
-function limpiarFormulario() {
-  const nombre = document.getElementById("nombre");
-  const precio = document.getElementById("precio");
-  const imagen = document.getElementById("imagen_url");
-  const preview = document.getElementById("previewImg");
-  const descripcion = document.getElementById("descripcion");
-  const tipoVenta = document.getElementById("tipoVenta");
-  const categoria = document.getElementById("categoria");
-  const subcategoria = document.getElementById("subcategoria");
-  if (nombre) nombre.value = "";
-  if (precio) precio.value = "";
-  if (imagen) imagen.value = "";
-  if (preview) preview.src = "";
-  if (descripcion) descripcion.value = "";
-  if (tipoVenta) tipoVenta.value = "pieza";
-  if (categoria) categoria.value = "Pescadería";
-  if (subcategoria) subcategoria.value = "";
-  const subDiv = document.getElementById("subcategoriaDiv");
-  if (subDiv) subDiv.style.display = "none";
-  productoEditandoId = null;
-}
-
-function toggleSubcategoria() {
-  const categoria = document.getElementById("categoria")?.value;
-  const subDiv = document.getElementById("subcategoriaDiv");
-  if (categoria === "Marisquería") {
-    subDiv.style.display = "block";
-  } else {
-    subDiv.style.display = "none";
-  }
-}
-
-const imagenInput = document.getElementById("imagen_url");
-if (imagenInput) {
-  imagenInput.addEventListener("input", e => {
-    const preview = document.getElementById("previewImg");
-    if (preview) preview.src = e.target.value;
-  });
+function logout() {
+  supabaseClient.auth.signOut();
+  window.location.href = "admin.html";
 }
 
 // ======================
-// REPARTIDORES
+// PEDIDOS A DOMICILIO
 // ======================
-
 async function cargarRepartidores() {
   const { data, error } = await supabaseClient
     .from("user_roles")
@@ -317,173 +114,164 @@ async function cargarRepartidores() {
     .eq("role", "repartidor")
     .order("full_name", { ascending: true });
   if (error) {
-    handleError(error, "Error cargando repartidores.");
+    handleError(error, "No se pudieron cargar los repartidores.");
     return;
   }
   repartidoresCache = data || [];
 }
 
-// ======================
-// PEDIDOS (excluyendo locales)
-// ======================
-
-async function cargarPedidos() {
-  const estado = document.getElementById("filtroEstado")?.value || "Todos";
-  const fecha = document.getElementById("filtroFecha")?.value || "";
-
-  // 1. Pedidos online (excluyendo locales)
-  const { data: onlineData, error: onlineError } = await supabaseClient
-    .from("pedidos")
-    .select("*")
-    .neq('tipo_pedido', 'local')
-    .order("created_at", { ascending: false });
-
-  if (onlineError) {
-    handleError(onlineError, "Error cargando pedidos online.");
+async function cargarPedidos({ forzar = false } = {}) {
+  const [online, local] = await Promise.all([
+    supabaseClient.from("pedidos").select("*").neq("tipo_pedido", "local").order("created_at", { ascending: false }),
+    supabaseClient.from("pedidos").select("*").eq("tipo_pedido", "local").eq("estado_local", "cerrado")
+  ]);
+  if (online.error || local.error) {
+    handleError(online.error || local.error, "No se pudieron cargar los pedidos. Revisa tu internet.");
     return;
   }
 
-  // 2. Pedidos locales cerrados (para métricas)
-  const { data: localData, error: localError } = await supabaseClient
-    .from("pedidos")
-    .select("*")
-    .eq("tipo_pedido", "local")
-    .eq("estado_local", "cerrado");
+  pedidosCache = online.data || [];
+  todosPedidosCache = [...pedidosCache, ...(local.data || [])];
 
-  if (localError) {
-    handleError(localError, "Error cargando pedidos locales cerrados.");
-    return;
-  }
+  // Aviso de pedido nuevo
+  const ids = new Set(pedidosCache.map(p => p.id));
+  if (idsConocidos && pedidosCache.some(p => !idsConocidos.has(p.id))) reproducirNotificacion();
+  idsConocidos = ids;
 
-  // Unir ambos conjuntos para métricas
-  todosPedidosCache = [...(onlineData || []), ...(localData || [])];
-  
-  // Solo online para el listado
-  pedidosCache = onlineData || [];
+  // Redibujar solo si algo cambió
+  const firma = JSON.stringify(todosPedidosCache.map(p =>
+    [p.id, p.estado, p.repartidor_id, p.total, p.descuento_monto, (p.items || []).length, p.notas]));
+  if (!forzar && firma === firmaPedidos) return;
+  firmaPedidos = firma;
 
-  // Notificación de nuevo pedido online (solo online)
-  if (pedidosCache.length > 0) {
-    if (ultimoPedidoId && pedidosCache[0].id !== ultimoPedidoId) {
-      reproducirNotificacion();
-    }
-    ultimoPedidoId = pedidosCache[0].id;
-  }
-
-  // Filtros para el listado (solo online)
-  let pedidosFiltrados = [...pedidosCache];
-  if (estado !== "Todos") {
-    pedidosFiltrados = pedidosFiltrados.filter(p => p.estado === estado);
-  }
-  if (fecha) {
-    pedidosFiltrados = pedidosFiltrados.filter(p => getFechaPedidoFiltro(p) === fecha);
-  }
-
-  renderPedidos(pedidosFiltrados);
-  renderRepartidores(pedidosFiltrados);
-  renderGrafica(pedidosFiltrados);
-  
-  // Actualizar métricas con TODOS los pedidos (online + local cerrado)
+  renderPedidosFiltrados();
   actualizarMetricasPeriodo();
 }
 
+function pedidosDelDia() {
+  const fecha = $("filtroFecha").value;
+  return fecha ? pedidosCache.filter(p => getFechaPedidoFiltro(p) === fecha) : pedidosCache;
+}
+
+function renderPedidosFiltrados() {
+  const base = pedidosDelDia();
+
+  // Conteos en los filtros
+  const conteos = { Pendientes: base.filter(p => p.estado !== "Entregado").length };
+  ESTADOS_PEDIDO.forEach(e => { conteos[e.valor] = base.filter(p => p.estado === e.valor).length; });
+  document.querySelectorAll("[data-count]").forEach(el => { el.textContent = conteos[el.dataset.count] ?? 0; });
+
+  let lista = base;
+  if (filtroEstadoActual === "Pendientes") lista = base.filter(p => p.estado !== "Entregado");
+  else if (filtroEstadoActual !== "Todos") lista = base.filter(p => p.estado === filtroEstadoActual);
+
+  const fecha = $("filtroFecha").value;
+  $("resumenPedidos").textContent = `${lista.length} ${lista.length === 1 ? "pedido" : "pedidos"}` +
+    (fecha ? (fecha === getHoy() ? " · hoy" : ` · ${fecha}`) : " · todos los días");
+
+  renderPedidos(lista);
+  renderRepartidores(base);
+}
+
 function renderPedidos(lista) {
-  const cont = document.getElementById("pedidos");
-  if (!cont) return;
+  const cont = $("pedidos");
   if (!lista.length) {
-    cont.innerHTML = `<div class="panel">No hay pedidos</div>`;
+    const vacio = filtroEstadoActual === "Pendientes"
+      ? `<div class="empty-icon">🎉</div><div class="empty-title">No hay pedidos pendientes</div>
+         <p class="mt-8">Cuando llegue uno nuevo sonará un aviso.</p>`
+      : `<div class="empty-icon">📭</div><div class="empty-title">No hay pedidos con este filtro</div>`;
+    cont.innerHTML = `<div class="empty">${vacio}</div>`;
     return;
   }
-  cont.innerHTML = lista.map(p => {
-    const estadoClass = getEstadoClass(p.estado, p.created_at || p.fecha);
-    const fechaLocal = formatearFechaPedido(p);
-    const tiempo = calcularTiempoPedido(p);
-    const mapa = safeUrl(p.ubicacion);
-    const repartidorAsignadoId = p.repartidor_id || "";
-    const pedidoNumero = escapeHtml(p.numero_pedido || `#${p.id}`);
-    const itemsHtml = Array.isArray(p.items) && p.items.length
-      ? p.items.map(item => `
-          <li>${escapeHtml(item.nombre)} x${escapeHtml(item.qty)} — $${(Number(item.precio) * Number(item.qty)).toFixed(2)}</li>
-        `).join("")
-      : `<li>Sin detalle de productos</li>`;
-    const repartidoresOptions = repartidoresCache.length
-      ? repartidoresCache.map(r => `
-          <option value="${escapeHtml(r.user_id)}" ${r.user_id === repartidorAsignadoId ? "selected" : ""}>
-            ${escapeHtml(r.full_name || "Sin nombre")}
-          </option>
-        `).join("")
-      : `<option value="">No hay repartidores</option>`;
 
-    let descuentoHtml = '';
-    if (p.descuento_monto && p.descuento_monto > 0) {
-      const tipoTexto = p.descuento_tipo === 'porcentaje' ? `${Number(p.descuento_valor)}%` : `$${Number(p.descuento_valor).toFixed(2)}`;
-      descuentoHtml = `<p>🎁 Descuento: -$${Number(p.descuento_monto).toFixed(2)} (${tipoTexto})</p>`;
-    }
+  cont.innerHTML = lista.map(p => {
+    const info = estadoInfo(p.estado);
+    const clases = getEstadoClass(p.estado, p.created_at || p.fecha);
+    const numero = escapeHtml(p.numero_pedido || `#${p.id}`);
+    const items = Array.isArray(p.items) ? p.items : [];
+    const actual = ESTADOS_PEDIDO.findIndex(e => e.valor === p.estado);
+
+    const pasos = ESTADOS_PEDIDO.map((e, i) => `
+      <button class="step ${i < actual ? "is-done" : ""} ${i === actual ? `is-current ${e.clase}` : ""}"
+              onclick="cambiarEstado(${p.id}, '${e.valor}')" ${i === actual ? 'aria-current="step"' : ""}>
+        <i class="fa-solid ${i < actual ? "fa-check" : e.icono}"></i>${e.etiqueta}
+      </button>`).join("");
+
+    const opcionesRep = `<option value="">Sin asignar</option>` + repartidoresCache.map(r => `
+      <option value="${escapeHtml(r.user_id)}" ${r.user_id === p.repartidor_id ? "selected" : ""}>${escapeHtml(r.full_name || "Sin nombre")}</option>`).join("");
+
+    const itemsHtml = items.length
+      ? items.map(item => `<li><span><span class="qty">${escapeHtml(cantidadTexto(item))}</span>${escapeHtml(item.nombre)}</span>
+          <span>$${(Number(item.precio) * Number(item.qty)).toFixed(2)}</span></li>`).join("")
+      : "<li>Sin detalle de productos</li>";
+
+    const descuentoHtml = Number(p.descuento_monto) > 0
+      ? `<div class="row-between small mt-8"><span class="muted">Descuento ${p.descuento_tipo === "porcentaje" ? `(${Number(p.descuento_valor)}%)` : ""}</span>
+         <span>−$${Number(p.descuento_monto).toFixed(2)}</span></div>` : "";
 
     return `
-      <div class="pedido-card ${estadoClass}">
-        <div class="pedido-top">
-          <div>
-            <h3>${escapeHtml(p.nombre)}</h3>
-            <span class="pedido-phone">📞 ${escapeHtml(p.telefono)}</span>
-            <p class="pedido-time">🧾 Pedido: <strong>${pedidoNumero}</strong></p>
-            <p class="pedido-time">🕒 ${escapeHtml(fechaLocal)}</p>
-            <p class="pedido-time">⏱️ ${tiempo}</p>
+      <article class="order ${clases}">
+        <div class="order-head">
+          <div class="grow">
+            <div class="order-name">${escapeHtml(p.nombre)}</div>
+            <div class="order-meta">Pedido ${numero} · ${escapeHtml(fechaHoraCortaMX(p.created_at))}</div>
+            ${p.estado !== "Entregado" ? `<div class="order-wait"><i class="fa-regular fa-clock"></i> ${escapeHtml(calcularTiempoPedido(p))}</div>` : ""}
           </div>
-          <span class="estado-badge ${estadoClass}">${escapeHtml(p.estado)}</span>
+          <span class="badge ${info.clase}">${info.etiqueta}</span>
         </div>
-        <div class="pedido-body">
-          <p>📍 ${escapeHtml(p.direccion)}</p>
-          <p>💳 ${escapeHtml(p.metodo_pago)}</p>
-          <p>💰 <strong>$${Number(p.total).toFixed(2)}</strong></p>
-          ${descuentoHtml}
-          ${p.notas ? `<p>📝 ${escapeHtml(p.notas)}</p>` : ''}
-          <p>🚚 Repartidor: ${escapeHtml(getRepartidorTextoPedido(p))}</p>
-          <div class="pedido-items">
-            <strong>Productos:</strong>
-            <ul>${itemsHtml}</ul>
+        <div class="order-body">
+          <div class="info-list">
+            <div class="info"><i class="fa-solid fa-phone"></i><a href="tel:${escapeHtml(p.telefono)}">${escapeHtml(p.telefono)}</a></div>
+            <div class="info"><i class="fa-solid fa-location-dot"></i><span>${escapeHtml(p.direccion)}</span></div>
+            <div class="info"><i class="fa-solid fa-wallet"></i><span>${escapeHtml(p.metodo_pago || "—")}</span></div>
           </div>
+          ${p.notas ? `<div class="note"><i class="fa-solid fa-note-sticky"></i><span>${escapeHtml(p.notas)}</span></div>` : ""}
+          <details class="more">
+            <summary>Productos (${items.length})</summary>
+            <ul class="items">${itemsHtml}</ul>
+            ${descuentoHtml}
+          </details>
+          <div class="total-line"><span class="muted strong">Total</span><span class="amount">${formatoDinero(p.total)}</span></div>
+
+          <div class="steps">${pasos}</div>
+
+          <div class="assign">
+            <label for="rep-${p.id}"><i class="fa-solid fa-motorcycle"></i> Repartidor</label>
+            <select id="rep-${p.id}" class="select" onchange="asignarRepartidor(${p.id}, this.value)">${opcionesRep}</select>
+          </div>
+
+          <div class="btn-grid">
+            <a class="btn btn-outline" href="${safeUrl(p.ubicacion)}" target="_blank" rel="noopener"><i class="fa-solid fa-map-location-dot"></i> Mapa</a>
+            <button class="btn btn-outline" onclick="abrirModalWhatsApp(${p.id})"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
+            <button class="btn btn-outline" onclick="imprimirPedido(${p.id})"><i class="fa-solid fa-print"></i> Ticket</button>
+            <button class="btn btn-outline" onclick="abrirModalEditarPedido(${p.id})"><i class="fa-solid fa-pen"></i> Editar</button>
+          </div>
+          <button class="btn btn-text danger" onclick="eliminarPedido(${p.id})"><i class="fa-solid fa-trash-can"></i> Borrar pedido</button>
         </div>
-        <div class="pedido-actions">
-          <select onchange="cambiarEstado(${p.id}, this.value)">
-            <option ${p.estado === "Recibido" ? "selected" : ""}>Recibido</option>
-            <option ${p.estado === "En proceso" ? "selected" : ""}>En proceso</option>
-            <option ${p.estado === "El repartidor está en camino" ? "selected" : ""}>El repartidor está en camino</option>
-            <option ${p.estado === "Entregado" ? "selected" : ""}>Entregado</option>
-          </select>
-          <select onchange="asignarRepartidor(${p.id}, this.value)">
-            <option value="">Asignar repartidor</option>
-            ${repartidoresOptions}
-          </select>
-          <a href="${mapa}" target="_blank" class="map-btn">Mapa</a>
-          <button class="delete-pedido-btn" onclick="eliminarPedido(${p.id})">🗑️ Eliminar</button>
-          <button class="edit-pedido-btn" onclick="abrirModalEditarPedido(${p.id})">✏️ Editar productos</button>
-          <button class="whatsapp-btn" onclick="abrirModalWhatsApp(${p.id})">📱 WhatsApp</button>
-          <button class="print-pedido-btn" onclick="imprimirPedido(${p.id})">🖨️ Imprimir</button>
-        </div>
-      </div>
-    `;
+      </article>`;
   }).join("");
 }
 
 async function eliminarPedido(id) {
-  if (!confirm("¿Estás seguro de eliminar este pedido? Esta acción no se puede deshacer.")) return;
+  const p = pedidosCache.find(x => x.id === id);
+  if (!confirm(`¿Borrar el pedido de ${p?.nombre || "este cliente"}? No se puede deshacer.`)) return;
   const { error } = await supabaseClient.from("pedidos").delete().eq("id", id);
   if (error) {
-    handleError(error, "No se pudo eliminar el pedido.");
+    handleError(error, "No se pudo borrar el pedido.");
     return;
   }
-  showToast("Pedido eliminado correctamente", "success");
-  cargarPedidos();
+  showToast("Pedido borrado", "success");
+  cargarPedidos({ forzar: true });
 }
 
 async function cambiarEstado(id, nuevoEstado) {
   const { error } = await supabaseClient.from("pedidos").update({ estado: nuevoEstado }).eq("id", id);
   if (error) {
-    handleError(error, "Error actualizando estado.");
+    handleError(error, "No se pudo cambiar el estado.");
     return;
   }
-  showToast("Estado actualizado correctamente", "success");
-  cargarPedidos();
+  showToast(`Estado: ${estadoInfo(nuevoEstado).etiqueta}`, "success");
+  cargarPedidos({ forzar: true });
 }
 
 async function asignarRepartidor(id, repartidorId) {
@@ -497,99 +285,44 @@ async function asignarRepartidor(id, repartidorId) {
     handleError(error, "No se pudo asignar el repartidor.");
     return;
   }
-  showToast("Repartidor asignado correctamente", "success");
-  cargarPedidos();
+  showToast(repartidor ? `Asignado a ${repartidor.full_name}` : "Repartidor quitado", "success");
+  cargarPedidos({ forzar: true });
 }
 
-function renderGrafica(lista) {
-  const estados = {
-    "Recibido": 0,
-    "En proceso": 0,
-    "El repartidor está en camino": 0,
-    "Entregado": 0
-  };
-  lista.forEach(p => {
-    if (estados[p.estado] !== undefined) estados[p.estado]++;
-  });
-  const canvas = document.getElementById("graficaPedidos");
-  if (!canvas) return;
-  if (chart) chart.destroy();
-  chart = new Chart(canvas, {
-    type: "doughnut",
-    data: {
-      labels: Object.keys(estados),
-      datasets: [{ data: Object.values(estados) }]
-    }
-  });
-}
-
-// ======================
-// RESUMEN DE REPARTIDORES (solo efectivo entregado)
-// ======================
 function renderRepartidores(lista) {
-  const cont = document.getElementById("resumenRepartidores");
-  if (!cont) return;
-
-  const pedidosFiltrados = lista.filter(p => 
-    p.metodo_pago === "Efectivo" && p.estado === "Entregado"
-  );
-
-  if (pedidosFiltrados.length === 0) {
-    cont.innerHTML = `<div class="panel">No hay pedidos en efectivo entregados en esta vista.</div>`;
-    return;
-  }
-
+  const cont = $("resumenRepartidores");
   const resumen = {};
-  pedidosFiltrados.forEach(p => {
-    let repartidorNombre = p.repartidor_nombre;
-    if (!repartidorNombre && p.repartidor_id) {
-      const rep = repartidoresCache.find(r => r.user_id === p.repartidor_id);
-      repartidorNombre = rep ? rep.full_name : "Sin nombre";
-    }
-    if (!repartidorNombre || repartidorNombre === "Sin asignar") return;
-
-    if (!resumen[repartidorNombre]) resumen[repartidorNombre] = 0;
-    resumen[repartidorNombre] += Number(p.total);
+  lista.filter(p => p.metodo_pago === "Efectivo" && p.estado === "Entregado").forEach(p => {
+    const nombre = getRepartidorTextoPedido(p);
+    if (nombre === "Sin asignar") return;
+    resumen[nombre] = (resumen[nombre] || 0) + Number(p.total);
   });
-
   const entradas = Object.entries(resumen);
   if (!entradas.length) {
-    cont.innerHTML = `<div class="panel">No hay repartidores con pedidos en efectivo entregados.</div>`;
+    cont.innerHTML = `<div class="empty-cart">Todavía no hay cobros en efectivo entregados.</div>`;
     return;
   }
-
   cont.innerHTML = entradas.map(([nombre, total]) => `
-    <div class="admin-item">
-      <strong>${escapeHtml(nombre)}</strong>
-      <div style="font-size: 1.2rem; font-weight: bold; color: #0ea5a4;">$${total.toFixed(2)}</div>
-    </div>
-  `).join("");
+    <div class="list-item">
+      <i class="fa-solid fa-motorcycle muted"></i>
+      <div class="grow title">${escapeHtml(nombre)}</div>
+      <div class="amount">${formatoDinero(total)}</div>
+    </div>`).join("");
 }
 
 function ponerHoy() {
-  const filtro = document.getElementById("filtroFecha");
-  if (filtro) filtro.value = getHoy();
-  cargarPedidos();
+  $("filtroFecha").value = getHoy();
+  renderPedidosFiltrados();
 }
 
-function cerrarDia() {
-  const fecha = document.getElementById("filtroFecha")?.value || getHoy();
-  localStorage.setItem("fishmar_dia_cerrado", fecha);
-  showToast(`Día cerrado: ${fecha}`, "success");
-}
-
-function logout() {
-  supabaseClient.auth.signOut();
-  window.location.href = "admin.html";
+function limpiarFecha() {
+  $("filtroFecha").value = "";
+  renderPedidosFiltrados();
 }
 
 // ======================
-// EDICIÓN DE PRODUCTOS EN PEDIDO CON DESCUENTO
+// EDITAR PRODUCTOS DE UN PEDIDO
 // ======================
-
-let pedidoEditando = null;
-let productosEditables = [];
-
 function abrirModalEditarPedido(pedidoId) {
   const pedido = pedidosCache.find(p => p.id === pedidoId);
   if (!pedido) {
@@ -597,95 +330,62 @@ function abrirModalEditarPedido(pedidoId) {
     return;
   }
   pedidoEditando = { ...pedido };
-  productosEditables = pedido.items ? pedido.items.map(item => ({ ...item })) : [];
+  productosEditables = (pedido.items || []).map(item => ({ ...item }));
 
-  if (pedido.descuento_valor) {
-    descuentoValorActual = pedido.descuento_valor;
-    descuentoTipoActual = pedido.descuento_tipo || 'monto';
-    document.getElementById("descuentoValor").value = descuentoValorActual;
-    document.getElementById("descuentoTipo").value = descuentoTipoActual;
-  } else {
-    quitarDescuento();
-  }
+  descuentoValorActual = Number(pedido.descuento_valor) || 0;
+  descuentoTipoActual = pedido.descuento_tipo || "monto";
+  $("descuentoValor").value = descuentoValorActual || "";
+  $("descuentoTipo").value = descuentoTipoActual;
 
-  const select = document.getElementById("nuevoProductoSelect");
-  if (select) {
-    select.innerHTML = '<option value="">-- Selecciona --</option>';
-    productosCache.forEach(prod => {
-      const option = document.createElement("option");
-      option.value = prod.id;
-      option.textContent = `${prod.nombre} - $${prod.precio} / ${prod.tipo_venta === 'granel' ? 'kg' : 'pieza'}`;
-      option.dataset.precio = prod.precio;
-      option.dataset.tipo_venta = prod.tipo_venta;
-      option.dataset.nombre = prod.nombre;
-      select.appendChild(option);
-    });
-    select.addEventListener("change", function() {
-      const container = document.getElementById("nuevoProductoCantidadContainer");
-      if (this.value) {
-        container.style.display = "block";
-      } else {
-        container.style.display = "none";
-      }
-    });
-  }
+  const select = $("nuevoProductoSelect");
+  select.innerHTML = '<option value="">Elige un producto</option>' + productosCache.map(prod => `
+    <option value="${prod.id}">${escapeHtml(prod.nombre)} — $${Number(prod.precio).toFixed(2)} ${prod.tipo_venta === "granel" ? "por kg" : "c/u"}</option>`).join("");
+  $("nuevoProductoCantidadContainer").hidden = true;
 
-  document.getElementById("modalPedidoNumero").textContent = pedido.numero_pedido || `#${pedido.id}`;
+  $("modalPedidoNumero").textContent = pedido.numero_pedido || `#${pedido.id}`;
   renderizarProductosEditables();
   actualizarInfoDescuento();
-  document.getElementById("modalEditarPedido").style.display = "block";
-  document.body.style.overflow = "hidden";
+  abrirHoja("modalEditarPedido");
 }
 
 function renderizarProductosEditables() {
-  const cont = document.getElementById("editarProductosLista");
-  if (!cont) return;
-
+  const cont = $("editarProductosLista");
   if (!productosEditables.length) {
-    cont.innerHTML = "<div class='empty-cart'>No hay productos en este pedido.</div>";
+    cont.innerHTML = `<div class="empty-cart">Este pedido no tiene productos.</div>`;
     return;
   }
-
   cont.innerHTML = productosEditables.map((item, index) => {
-    const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pieza';
-    const step = item.tipo_venta === 'granel' ? 0.01 : 1;
+    const esGranel = item.tipo_venta === "granel";
+    const paso = esGranel ? 0.25 : 1;
     return `
-      <div class="cart-item editable-item" data-index="${index}">
-        <div class="cart-item-info">
-          <strong>${escapeHtml(item.nombre)}</strong>
-          <small>$${Number(item.precio).toFixed(2)} / ${unidad}</small>
-          <div class="cart-item-price">$${(Number(item.precio) * Number(item.qty)).toFixed(2)}</div>
+      <div class="cart-line">
+        <div class="cl-top">
+          <div>
+            <div class="cl-name">${escapeHtml(item.nombre)}</div>
+            <div class="cl-unit">$${Number(item.precio).toFixed(2)} ${esGranel ? "por kg" : "c/u"}</div>
+          </div>
+          <div class="cl-total">$${(Number(item.precio) * Number(item.qty)).toFixed(2)}</div>
         </div>
-        <div class="qty-controls">
-          <button onclick="cambiarCantidadProductoEditable(${index}, -${step})">−</button>
-          <input type="number" value="${Number(item.qty)}" step="${step}" min="0.01" onchange="cambiarCantidadProductoEditable(${index}, 0, this.value)">
-          <button onclick="cambiarCantidadProductoEditable(${index}, ${step})">+</button>
-          <button class="remove" onclick="eliminarProductoEditable(${index})">Eliminar</button>
+        <div class="cl-bottom">
+          <div class="stepper">
+            <button type="button" onclick="cambiarCantidadProductoEditable(${index}, -${paso})">−</button>
+            <span class="stepper-value">${escapeHtml(esGranel ? `${Number(item.qty).toFixed(2)} kg` : Number(item.qty))}</span>
+            <button type="button" onclick="cambiarCantidadProductoEditable(${index}, ${paso})">+</button>
+          </div>
+          <button class="btn btn-text danger" onclick="eliminarProductoEditable(${index})"><i class="fa-solid fa-trash-can"></i> Quitar</button>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join("");
 }
 
-function cambiarCantidadProductoEditable(index, delta, newValue = null) {
-  let item = productosEditables[index];
+function cambiarCantidadProductoEditable(index, delta) {
+  const item = productosEditables[index];
   if (!item) return;
-  let nuevaCantidad;
-  if (newValue !== null) {
-    nuevaCantidad = parseFloat(newValue);
-  } else {
-    nuevaCantidad = item.qty + delta;
-  }
-  if (isNaN(nuevaCantidad)) nuevaCantidad = 0.01;
-  if (nuevaCantidad <= 0) {
+  const nueva = Number(item.qty) + delta;
+  if (nueva <= 0.001) {
     productosEditables.splice(index, 1);
   } else {
-    if (item.tipo_venta === 'granel') {
-      nuevaCantidad = Math.round(nuevaCantidad * 100) / 100;
-    } else {
-      nuevaCantidad = Math.round(nuevaCantidad);
-    }
-    item.qty = nuevaCantidad;
+    item.qty = item.tipo_venta === "granel" ? Math.round(nueva * 100) / 100 : Math.round(nueva);
   }
   renderizarProductosEditables();
   actualizarInfoDescuento();
@@ -698,279 +398,408 @@ function eliminarProductoEditable(index) {
 }
 
 function agregarProductoAPedido() {
-  const select = document.getElementById("nuevoProductoSelect");
-  const cantidadInput = document.getElementById("nuevoProductoCantidad");
-  if (!select.value) {
-    showToast("Selecciona un producto.");
+  const select = $("nuevoProductoSelect");
+  const cantidadInput = $("nuevoProductoCantidad");
+  const productoId = parseInt(select.value, 10);
+  const prod = productosCache.find(p => p.id === productoId);
+  if (!prod) {
+    showToast("Elige un producto.");
     return;
   }
-  let cantidad = parseFloat(cantidadInput.value);
+  const cantidad = parseFloat(cantidadInput.value);
   if (isNaN(cantidad) || cantidad <= 0) {
-    showToast("Ingresa una cantidad válida.");
+    showToast("Escribe una cantidad válida.");
     return;
   }
-
-  const option = select.options[select.selectedIndex];
-  const productoId = parseInt(select.value);
-  const nombre = option.dataset.nombre;
-  const precio = parseFloat(option.dataset.precio);
-  const tipoVenta = option.dataset.tipo_venta;
 
   const existente = productosEditables.find(p => p.id === productoId);
   if (existente) {
-    existente.qty += cantidad;
-    if (existente.tipo_venta === 'granel') {
-      existente.qty = Math.round(existente.qty * 100) / 100;
-    } else {
-      existente.qty = Math.round(existente.qty);
-    }
+    const suma = Number(existente.qty) + cantidad;
+    existente.qty = existente.tipo_venta === "granel" ? Math.round(suma * 100) / 100 : Math.round(suma);
   } else {
     productosEditables.push({
-      id: productoId,
-      nombre: nombre,
-      precio: precio,
-      tipo_venta: tipoVenta,
-      qty: cantidad
+      id: prod.id,
+      nombre: prod.nombre,
+      precio: Number(prod.precio),
+      tipo_venta: prod.tipo_venta,
+      qty: prod.tipo_venta === "granel" ? cantidad : Math.round(cantidad)
     });
   }
 
   select.value = "";
   cantidadInput.value = "";
-  document.getElementById("nuevoProductoCantidadContainer").style.display = "none";
-
+  $("nuevoProductoCantidadContainer").hidden = true;
   renderizarProductosEditables();
   actualizarInfoDescuento();
 }
 
-function actualizarInfoDescuento() {
-  let subtotal = 0;
-  productosEditables.forEach(item => {
-    subtotal += Number(item.precio) * Number(item.qty);
-  });
-
+function calcularEdicion() {
+  const subtotal = productosEditables.reduce((s, i) => s + Number(i.precio) * Number(i.qty), 0);
   let descuento = 0;
   if (descuentoValorActual > 0) {
-    if (descuentoTipoActual === 'porcentaje') {
-      descuento = subtotal * (descuentoValorActual / 100);
-    } else {
-      descuento = descuentoValorActual;
-    }
+    descuento = descuentoTipoActual === "porcentaje" ? subtotal * (descuentoValorActual / 100) : descuentoValorActual;
     if (descuento > subtotal) descuento = subtotal;
   }
-  descuentoMontoActual = descuento;
-  const totalConDescuento = roundUpToHalf(subtotal - descuento);
+  return { subtotal, descuento, total: roundUpToHalf(subtotal - descuento) };
+}
 
-  document.getElementById("subtotalSinDescuento").textContent = subtotal.toFixed(2);
-  document.getElementById("montoDescuento").textContent = descuento.toFixed(2);
-  document.getElementById("totalConDescuento").textContent = totalConDescuento.toFixed(2);
-  document.getElementById("modalEditarTotal").textContent = totalConDescuento.toFixed(2);
+function actualizarInfoDescuento() {
+  const { subtotal, descuento, total } = calcularEdicion();
+  $("subtotalSinDescuento").textContent = subtotal.toFixed(2);
+  $("montoDescuento").textContent = descuento.toFixed(2);
+  $("totalConDescuento").textContent = total.toFixed(2);
+  $("modalEditarTotal").textContent = total.toFixed(2);
 }
 
 function aplicarDescuento() {
-  const valor = parseFloat(document.getElementById("descuentoValor").value);
-  const tipo = document.getElementById("descuentoTipo").value;
+  const valor = parseFloat($("descuentoValor").value);
   if (isNaN(valor) || valor <= 0) {
-    showToast("Ingresa un valor válido para el descuento.");
+    showToast("Escribe una cantidad válida para el descuento.");
     return;
   }
   descuentoValorActual = valor;
-  descuentoTipoActual = tipo;
+  descuentoTipoActual = $("descuentoTipo").value;
   actualizarInfoDescuento();
 }
 
 function quitarDescuento() {
   descuentoValorActual = 0;
-  descuentoTipoActual = 'monto';
-  document.getElementById("descuentoValor").value = "";
+  descuentoTipoActual = "monto";
+  $("descuentoValor").value = "";
   actualizarInfoDescuento();
 }
 
 async function guardarEdicionPedido() {
   if (!pedidoEditando) return;
-
-  let subtotal = 0;
-  productosEditables.forEach(item => {
-    subtotal += Number(item.precio) * Number(item.qty);
-  });
-  let descuento = 0;
-  if (descuentoValorActual > 0) {
-    if (descuentoTipoActual === 'porcentaje') {
-      descuento = subtotal * (descuentoValorActual / 100);
-    } else {
-      descuento = descuentoValorActual;
-    }
-    if (descuento > subtotal) descuento = subtotal;
-  }
-  const total = roundUpToHalf(subtotal - descuento);
-
+  const { descuento, total } = calcularEdicion();
   const payload = {
     items: productosEditables,
-    total: total,
+    total,
     descuento_valor: descuentoValorActual,
     descuento_tipo: descuentoTipoActual,
     descuento_monto: descuento
   };
-
-  const { error } = await supabaseClient
-    .from("pedidos")
-    .update(payload)
-    .eq("id", pedidoEditando.id);
-
+  const { error } = await supabaseClient.from("pedidos").update(payload).eq("id", pedidoEditando.id);
   if (error) {
-    handleError(error, "No se pudo guardar los cambios.");
+    handleError(error, "No se pudieron guardar los cambios.");
     return;
   }
-
-  showToast("Pedido actualizado correctamente", "success");
+  showToast("Pedido actualizado", "success");
   cerrarModalEditarPedido();
-  cargarPedidos();
+  cargarPedidos({ forzar: true });
 }
 
 function cerrarModalEditarPedido() {
-  document.getElementById("modalEditarPedido").style.display = "none";
-  document.body.style.overflow = "auto";
+  cerrarHoja("modalEditarPedido");
   pedidoEditando = null;
   productosEditables = [];
   descuentoValorActual = 0;
-  descuentoTipoActual = 'monto';
-  descuentoMontoActual = 0;
+  descuentoTipoActual = "monto";
 }
 
 // ======================
-// WHATSAPP
+// WHATSAPP AL CLIENTE
 // ======================
-
-let pedidoWhatsApp = null;
-
 function abrirModalWhatsApp(pedidoId) {
   const pedido = pedidosCache.find(p => p.id === pedidoId);
-  if (!pedido) {
-    showToast("No se encontró el pedido.");
-    return;
-  }
+  if (!pedido) return;
   pedidoWhatsApp = pedido;
 
-  const infoDiv = document.getElementById("whatsappPedidoInfo");
-  infoDiv.innerHTML = `
-    <strong>Cliente:</strong> ${escapeHtml(pedido.nombre)}<br>
-    <strong>Pedido:</strong> ${escapeHtml(pedido.numero_pedido || '#' + pedido.id)}<br>
-    <strong>Total:</strong> $${Number(pedido.total).toFixed(2)}<br>
-    <strong>Estado:</strong> ${escapeHtml(pedido.estado)}
-  `;
+  $("whatsappPedidoInfo").innerHTML = `
+    <span><strong>${escapeHtml(pedido.nombre)}</strong><br><span class="small muted">Pedido ${escapeHtml(pedido.numero_pedido || "#" + pedido.id)} · ${estadoInfo(pedido.estado).etiqueta}</span></span>
+    <span class="amount">${formatoDinero(pedido.total)}</span>`;
 
-  const numeroRaw = pedido.telefono;
-  let numeroLimpio = numeroRaw.replace(/\D/g, '');
-  if (numeroLimpio.length === 10) {
-    numeroLimpio = '52' + numeroLimpio;
-  }
-  document.getElementById("whatsappNumero").value = `+${numeroLimpio}`;
+  let numero = String(pedido.telefono || "").replace(/\D/g, "");
+  if (numero.length === 10) numero = "52" + numero;
+  $("whatsappNumero").value = `+${numero}`;
 
-  let mensaje = `Hola ${pedido.nombre}, soy de FishMar. Te contactamos para informarte sobre tu pedido:\n\n`;
+  let mensaje = `Hola ${pedido.nombre}, te escribimos de FishMar sobre tu pedido:\n\n`;
   mensaje += `📦 *Pedido #${pedido.numero_pedido || pedido.id}*\n`;
-  if (pedido.items && pedido.items.length) {
-    mensaje += `🛒 *Productos:*\n`;
-    pedido.items.forEach(item => {
-      const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pz';
-      mensaje += `• ${item.nombre} x${item.qty} ${unidad} - $${(Number(item.precio) * Number(item.qty)).toFixed(2)}\n`;
-    });
-  }
+  (pedido.items || []).forEach(item => {
+    const unidad = item.tipo_venta === "granel" ? "kg" : "pz";
+    mensaje += `• ${item.nombre} x${item.qty} ${unidad} - $${(Number(item.precio) * Number(item.qty)).toFixed(2)}\n`;
+  });
   mensaje += `\n💰 *Total:* $${Number(pedido.total).toFixed(2)}\n`;
-  mensaje += `🚚 *Estado:* ${pedido.estado}\n\n`;
-  mensaje += `Por favor, confírmame que has recibido esta información. ¡Gracias!`;
-  document.getElementById("whatsappMensaje").value = mensaje;
+  mensaje += `🚚 *Estado:* ${estadoInfo(pedido.estado).etiqueta}\n\n`;
+  mensaje += `¡Gracias por tu compra!`;
+  $("whatsappMensaje").value = mensaje;
 
-  document.getElementById("modalWhatsApp").style.display = "block";
-  document.body.style.overflow = "hidden";
+  abrirHoja("modalWhatsApp");
 }
 
 function cerrarModalWhatsApp() {
-  document.getElementById("modalWhatsApp").style.display = "none";
-  document.body.style.overflow = "auto";
+  cerrarHoja("modalWhatsApp");
   pedidoWhatsApp = null;
 }
 
 function enviarWhatsApp() {
-  const numero = document.getElementById("whatsappNumero").value.trim();
-  const mensaje = document.getElementById("whatsappMensaje").value.trim();
+  const numero = $("whatsappNumero").value.replace(/\D/g, "");
+  const mensaje = $("whatsappMensaje").value.trim();
   if (!numero) {
-    showToast("No hay número de teléfono válido.");
+    showToast("El pedido no tiene un teléfono válido.");
     return;
   }
   if (!mensaje) {
     showToast("Escribe un mensaje.");
     return;
   }
-  const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
-  window.open(url, "_blank");
+  window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, "_blank");
   cerrarModalWhatsApp();
 }
 
 // ======================
-// MÉTRICAS AVANZADAS (con online + local cerrado)
+// TICKET
 // ======================
+function imprimirPedido(pedidoId) {
+  const pedido = pedidosCache.find(p => p.id === pedidoId);
+  if (!pedido) return;
 
-function getFechaPedidoMetricas(p) {
-  // Para pedidos locales cerrados
-  if (p.tipo_pedido === 'local' && p.fecha_cierre) {
-    const d = new Date(p.fecha_cierre);
-    if (!isNaN(d.getTime())) return d;
+  const items = pedido.items || [];
+  const subtotal = items.reduce((s, i) => s + Number(i.precio) * Number(i.qty), 0);
+  const descuento = Number(pedido.descuento_monto) || 0;
+  const filas = items.map(item => `
+    <tr><td class="q">${escapeHtml(cantidadTexto(item))}</td><td>${escapeHtml(item.nombre)}</td>
+    <td class="r">$${(Number(item.precio) * Number(item.qty)).toFixed(2)}</td></tr>`).join("");
+
+  const ventana = window.open("", "_blank", "width=420,height=700");
+  if (!ventana) {
+    showToast("Tu navegador bloqueó la ventana del ticket. Permite las ventanas emergentes.");
+    return;
   }
-  // Para pedidos online
-  if (p.created_at) {
-    const d = new Date(p.created_at);
-    if (!isNaN(d.getTime())) return d;
-  }
-  if (p.fecha) {
-    const d = new Date(`${p.fecha}T00:00:00`);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return null;
+  ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ticket ${escapeHtml(pedido.numero_pedido || pedido.id)}</title>
+    <style>
+      body { font-family: "Courier New", monospace; width: 58mm; margin: 0 auto; padding: 3mm 2mm; color: #000; font-size: 10pt; line-height: 1.3; }
+      h2 { font-size: 14pt; margin: 0; text-align: center; }
+      .c { text-align: center; } p { margin: 2px 0; }
+      .box { border: 1px solid #000; padding: 4px; text-align: center; font-weight: bold; margin: 6px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 2px 0; vertical-align: top; } td.q { width: 22%; } td.r { text-align: right; white-space: nowrap; }
+      hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
+      .tot td { font-weight: bold; font-size: 12pt; }
+      .no-print { text-align: center; margin-top: 16px; }
+      .no-print button { font-size: 16px; padding: 10px 16px; margin: 4px; }
+      @media print { .no-print { display: none; } }
+    </style></head><body>
+    <h2>🐟 FISH-MAR</h2>
+    <p class="c">Pescados y Mariscos frescos</p>
+    <p class="c">Pirules Mz 004, Alfredo del Mazo<br>Ixtapaluca, Méx. C.P. 56577<br>Tel. (55) 6908 0488</p>
+    <div class="box">PEDIDO ${escapeHtml(pedido.numero_pedido || "#" + pedido.id)}<br>${escapeHtml(formatearFechaPedido(pedido))}</div>
+    <p><b>CLIENTE:</b> ${escapeHtml(pedido.nombre)}</p>
+    <p><b>TEL:</b> ${escapeHtml(pedido.telefono)}</p>
+    <p><b>DIRECCIÓN:</b> ${escapeHtml(pedido.direccion)}</p>
+    <p><b>PAGO:</b> ${escapeHtml((pedido.metodo_pago || "").toUpperCase())}</p>
+    <hr><table>${filas}</table><hr>
+    <table>
+      <tr><td>SUBTOTAL</td><td class="r">$${subtotal.toFixed(2)}</td></tr>
+      ${descuento > 0 ? `<tr><td>DESCUENTO</td><td class="r">-$${descuento.toFixed(2)}</td></tr>` : ""}
+      <tr class="tot"><td>TOTAL</td><td class="r">$${Number(pedido.total).toFixed(2)}</td></tr>
+    </table>
+    ${pedido.notas ? `<p><i>NOTAS: ${escapeHtml(pedido.notas)}</i></p>` : ""}
+    <hr><p class="c">¡Gracias por su compra!</p>
+    <div class="no-print"><button onclick="window.print()">🖨️ Imprimir</button><button onclick="window.close()">Cerrar</button></div>
+    </body></html>`);
+  ventana.document.close();
 }
 
-function cambiarPeriodo() {
-  periodoActual = document.getElementById("periodoSelector").value;
-  const divFechas = document.getElementById("fechasPersonalizadas");
-  if (periodoActual === 'personalizado') {
-    divFechas.style.display = "flex";
-  } else {
-    divFechas.style.display = "none";
-    actualizarMetricasPeriodo();
+// ======================
+// PRODUCTOS
+// ======================
+async function cargarProductosAdmin() {
+  const { data, error } = await supabaseClient.from("productos").select("*").order("nombre", { ascending: true });
+  if (error) {
+    handleError(error, "No se pudieron cargar los productos.");
+    return;
+  }
+  productosCache = data || [];
+  filtrarProductos();
+}
+
+function filtrarProductos() {
+  const busq = ($("searchProducto").value || "").toLowerCase().trim();
+  const filtrados = productosCache.filter(p =>
+    p.nombre.toLowerCase().includes(busq) &&
+    (categoriaProductoFilter === "all" || p.categoria === categoriaProductoFilter));
+  $("resumenProductos").textContent = `${filtrados.length} de ${productosCache.length} productos`;
+  renderProductosAdmin(filtrados);
+}
+
+function renderProductosAdmin(lista) {
+  const cont = $("productosAdmin");
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">🔎</div><div class="empty-title">No hay productos que coincidan</div></div>`;
+    return;
+  }
+  cont.innerHTML = lista.map(p => {
+    const img = p.imagen_url && p.imagen_url.trim()
+      ? `<img class="thumb" src="${safeUrl(p.imagen_url)}" alt="" loading="lazy">`
+      : `<div class="thumb thumb-empty">${p.categoria === "Pescadería" ? "🐟" : "🦐"}</div>`;
+    return `
+      <div class="list-item product-row">
+        ${img}
+        <div class="grow">
+          <div class="title">${escapeHtml(p.nombre)}</div>
+          <div class="price">$${Number(p.precio).toFixed(2)} <span class="small muted">${p.tipo_venta === "granel" ? "por kg" : "c/u"}</span></div>
+          <div class="tag">${escapeHtml(p.categoria)}${p.subcategoria ? " · " + escapeHtml(p.subcategoria) : ""}</div>
+        </div>
+        <div class="row-actions">
+          <button class="icon-btn" onclick="editarProducto(${p.id})" aria-label="Editar"><i class="fa-solid fa-pen"></i></button>
+          <button class="icon-btn" style="color:var(--danger)" onclick="eliminarProducto(${p.id})" aria-label="Borrar"><i class="fa-solid fa-trash-can"></i></button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function abrirModalProducto() {
+  limpiarFormulario();
+  $("tituloModalProducto").textContent = "Nuevo producto";
+  abrirHoja("modalProducto");
+}
+
+function cerrarModalProducto() {
+  cerrarHoja("modalProducto");
+  limpiarFormulario();
+}
+
+async function crearProducto() {
+  const nombre = $("nombre").value.trim();
+  const precio = parseFloat($("precio").value);
+  const categoria = $("categoria").value;
+  const imagen_url = $("imagen_url").value.trim();
+  const descripcion = $("descripcion").value.trim();
+  const tipoVenta = $("tipoVenta").value;
+  let subcategoria = null;
+
+  if (!nombre) { showToast("Escribe el nombre del producto."); return; }
+  if (isNaN(precio) || precio < 0) { showToast("Escribe un precio válido."); return; }
+  if (categoria === "Marisquería") {
+    subcategoria = $("subcategoria").value;
+    if (!subcategoria) { showToast("Elige la sección del menú."); return; }
+  }
+
+  const producto = {
+    nombre, precio, categoria, subcategoria,
+    imagen_url: imagen_url || null,
+    descripcion: descripcion || null,
+    tipo_venta: tipoVenta
+  };
+
+  const btn = $("btnGuardarProducto");
+  btn.disabled = true;
+  try {
+    const { error } = productoEditandoId
+      ? await supabaseClient.from("productos").update(producto).eq("id", productoEditandoId)
+      : await supabaseClient.from("productos").insert([producto]);
+    if (error) {
+      handleError(error, "No se pudo guardar el producto.");
+      return;
+    }
+    showToast(productoEditandoId ? "Producto actualizado" : "Producto agregado", "success");
+    cerrarModalProducto();
+    await cargarProductosAdmin();
+  } finally {
+    btn.disabled = false;
   }
 }
 
-function aplicarPersonalizado() {
-  fechaInicioPersonalizado = document.getElementById("fechaInicio").value;
-  fechaFinPersonalizado = document.getElementById("fechaFin").value;
-  if (!fechaInicioPersonalizado || !fechaFinPersonalizado) {
-    showToast("Selecciona ambas fechas");
+function editarProducto(id) {
+  const p = productosCache.find(x => x.id === id);
+  if (!p) return;
+  $("nombre").value = p.nombre || "";
+  $("precio").value = p.precio ?? "";
+  $("categoria").value = p.categoria || "Pescadería";
+  $("imagen_url").value = p.imagen_url || "";
+  $("descripcion").value = p.descripcion || "";
+  $("tipoVenta").value = p.tipo_venta || "pieza";
+  toggleSubcategoria();
+  $("subcategoria").value = p.categoria === "Marisquería" ? (p.subcategoria || "") : "";
+  actualizarPreview();
+  productoEditandoId = id;
+  $("tituloModalProducto").textContent = "Editar producto";
+  abrirHoja("modalProducto");
+}
+
+async function eliminarProducto(id) {
+  const p = productosCache.find(x => x.id === id);
+  if (!confirm(`¿Borrar "${p?.nombre || "este producto"}" del menú? No se puede deshacer.`)) return;
+  const { error } = await supabaseClient.from("productos").delete().eq("id", id);
+  if (error) {
+    handleError(error, "No se pudo borrar el producto.");
+    return;
+  }
+  showToast("Producto borrado", "success");
+  cargarProductosAdmin();
+}
+
+function limpiarFormulario() {
+  ["nombre", "precio", "imagen_url", "descripcion"].forEach(id => { $(id).value = ""; });
+  $("tipoVenta").value = "pieza";
+  $("categoria").value = "Pescadería";
+  $("subcategoria").value = "";
+  toggleSubcategoria();
+  actualizarPreview();
+  productoEditandoId = null;
+}
+
+function toggleSubcategoria() {
+  $("subcategoriaDiv").hidden = $("categoria").value !== "Marisquería";
+}
+
+function actualizarPreview() {
+  const url = $("imagen_url").value.trim();
+  const img = $("previewImg");
+  const segura = url ? safeUrl(url) : "#";
+  img.hidden = segura === "#";
+  if (!img.hidden) img.src = url;
+}
+
+// ======================
+// VENTAS (MÉTRICAS)
+// ======================
+function getDiaPedidoMetricas(p) {
+  if (p.tipo_pedido === "local" && p.fecha_cierre) return fechaMX(p.fecha_cierre);
+  if (p.created_at) return fechaMX(p.created_at);
+  return p.fecha || "";
+}
+
+function seleccionarPeriodo(periodo) {
+  periodoActual = periodo;
+  document.querySelectorAll("#filtrosPeriodo .chip").forEach(c => c.classList.toggle("is-active", c.dataset.periodo === periodo));
+  $("fechasPersonalizadas").hidden = periodo !== "personalizado";
+  if (periodo === "personalizado") {
+    if (!$("fechaInicio").value) $("fechaInicio").value = sumarDias(getHoy(), -6);
+    if (!$("fechaFin").value) $("fechaFin").value = getHoy();
     return;
   }
   actualizarMetricasPeriodo();
 }
 
-// Día del pedido en hora de México ("YYYY-MM-DD")
-function getDiaPedidoMetricas(p) {
-  if (p.tipo_pedido === 'local' && p.fecha_cierre) return fechaMX(p.fecha_cierre);
-  if (p.created_at) return fechaMX(p.created_at);
-  return p.fecha || "";
+function aplicarPersonalizado() {
+  fechaInicioPersonalizado = $("fechaInicio").value;
+  fechaFinPersonalizado = $("fechaFin").value;
+  if (!fechaInicioPersonalizado || !fechaFinPersonalizado) {
+    showToast("Elige las dos fechas.");
+    return;
+  }
+  actualizarMetricasPeriodo();
 }
 
-async function actualizarMetricasPeriodo() {
-  // Fechas como texto "YYYY-MM-DD" en hora de México, rango inclusivo
+function actualizarMetricasPeriodo() {
   const hoy = getHoy();
   let fechaInicio, fechaFin = hoy;
 
   switch (periodoActual) {
-    case 'hoy':
+    case "hoy":
       fechaInicio = hoy;
       break;
-    case 'semana':
+    case "semana":
       fechaInicio = sumarDias(hoy, -diaSemana(hoy)); // desde el domingo
       break;
-    case 'mes':
+    case "mes":
       fechaInicio = hoy.slice(0, 8) + "01";
       break;
-    case 'personalizado':
+    case "personalizado":
       if (!fechaInicioPersonalizado || !fechaFinPersonalizado) return;
       fechaInicio = fechaInicioPersonalizado;
       fechaFin = fechaFinPersonalizado;
@@ -978,109 +807,93 @@ async function actualizarMetricasPeriodo() {
       break;
   }
 
-  // Filtrar todos los pedidos (online + local cerrado)
-  const pedidosFiltrados = todosPedidosCache.filter(p => {
+  const pedidos = todosPedidosCache.filter(p => {
     const dia = getDiaPedidoMetricas(p);
     return dia && dia >= fechaInicio && dia <= fechaFin;
   });
 
-  actualizarStatsFiltrados(pedidosFiltrados);
-  generarDatosIngresosDiarios(pedidosFiltrados, fechaInicio, fechaFin);
-  generarVentasPorDiaSemana(pedidosFiltrados);
+  const ingresos = pedidos.reduce((acc, p) => acc + Number(p.total), 0);
+  const online = pedidos.filter(p => p.tipo_pedido !== "local");
+  $("statIngresos").textContent = formatoDinero(ingresos);
+  $("statPedidos").textContent = pedidos.length;
+  $("statProceso").textContent = online.filter(p => p.estado === "En proceso").length;
+  $("statEntregados").textContent = online.filter(p => p.estado === "Entregado").length;
+
+  if (typeof Chart === "undefined") return;
+  generarDatosIngresosDiarios(pedidos, fechaInicio, fechaFin);
+  generarVentasPorDiaSemana(pedidos);
 }
 
-function actualizarStatsFiltrados(pedidos) {
-  const ingresos = pedidos.reduce((acc, p) => acc + Number(p.total), 0);
-  document.getElementById("statPedidos").textContent = pedidos.length;
-  document.getElementById("statIngresos").textContent = `$${ingresos.toFixed(2)}`;
-  
-  // Para "En proceso" y "Entregados" solo consideramos pedidos online
-  const onlinePedidos = pedidos.filter(p => p.tipo_pedido !== 'local');
-  const enProceso = onlinePedidos.filter(p => p.estado === "En proceso").length;
-  const entregados = onlinePedidos.filter(p => p.estado === "Entregado").length;
-  document.getElementById("statProceso").textContent = enProceso;
-  document.getElementById("statEntregados").textContent = entregados;
-}
+const opcionesGrafica = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: { callbacks: { label: (ctx) => formatoDinero(ctx.raw) } }
+  },
+  scales: {
+    y: { beginAtZero: true, ticks: { callback: (v) => "$" + v }, grid: { color: "#eee8de" } },
+    x: { grid: { display: false } }
+  }
+};
 
 function generarDatosIngresosDiarios(pedidos, fechaInicio, fechaFin) {
-  // Se muestran como máximo los últimos 31 días del período
-  const labels = [];
+  // Como máximo los últimos 31 días del período
+  const dias = [];
   let dia = fechaFin;
-  while (dia >= fechaInicio && labels.length < 31) {
-    labels.unshift(dia);
+  while (dia >= fechaInicio && dias.length < 31) {
+    dias.unshift(dia);
     dia = sumarDias(dia, -1);
   }
-
   const totales = {};
   pedidos.forEach(p => {
     const d = getDiaPedidoMetricas(p);
     totales[d] = (totales[d] || 0) + Number(p.total);
   });
-  const ingresosPorDia = labels.map(d => totales[d] || 0);
 
-  const ctx = document.getElementById("graficaIngresosDiarios").getContext("2d");
   if (chartIngresos) chartIngresos.destroy();
-  chartIngresos = new Chart(ctx, {
-    type: 'line',
+  chartIngresos = new Chart($("graficaIngresosDiarios"), {
+    type: dias.length > 1 ? "line" : "bar",
     data: {
-      labels: labels,
+      labels: dias.map(d => `${Number(d.slice(8))}/${Number(d.slice(5, 7))}`),
       datasets: [{
-        label: 'Ingresos ($)',
-        data: ingresosPorDia,
-        borderColor: '#0ea5a4',
-        backgroundColor: 'rgba(14,165,164,0.1)',
-        tension: 0.2,
-        fill: true
+        data: dias.map(d => totales[d] || 0),
+        borderColor: "#0b7a75",
+        backgroundColor: dias.length > 1 ? "rgba(11,122,117,.12)" : "#0b7a75",
+        tension: .3,
+        fill: true,
+        borderRadius: 8,
+        pointRadius: 3
       }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toFixed(2)}` } }
-      }
-    }
+    options: opcionesGrafica
   });
 }
 
 function generarVentasPorDiaSemana(pedidos) {
-  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const ventasPorDia = [0,0,0,0,0,0,0];
-
+  const ventas = [0, 0, 0, 0, 0, 0, 0];
   pedidos.forEach(p => {
     const d = getDiaPedidoMetricas(p);
-    if (d) ventasPorDia[diaSemana(d)] += Number(p.total);
+    if (d) ventas[diaSemana(d)] += Number(p.total);
   });
 
-  const ctx = document.getElementById("graficaVentasPorDia").getContext("2d");
   if (chartVentasDia) chartVentasDia.destroy();
-  chartVentasDia = new Chart(ctx, {
-    type: 'bar',
+  chartVentasDia = new Chart($("graficaVentasPorDia"), {
+    type: "bar",
     data: {
-      labels: dias,
-      datasets: [{
-        label: 'Ventas ($)',
-        data: ventasPorDia,
-        backgroundColor: '#0ea5a4',
-        borderRadius: 8
-      }]
+      labels: ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
+      datasets: [{ data: ventas, backgroundColor: "#0d2a38", borderRadius: 8 }]
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        tooltip: { callbacks: { label: (ctx) => `$${ctx.raw.toFixed(2)}` } }
-      }
-    }
+    options: opcionesGrafica
   });
 }
 
 // ======================
-// VENTAS LOCAL (mejorado)
+// VENTAS EN EL RESTAURANTE
 // ======================
-
 async function cargarVentasLocal() {
-  const fecha = document.getElementById("filtroFechaLocal")?.value || getHoy();
+  const fecha = $("filtroFechaLocal").value || getHoy();
+  $("filtroFechaLocal").value = fecha;
   const rango = rangoDiaMX(fecha);
   const { data, error } = await supabaseClient
     .from("pedidos")
@@ -1088,118 +901,72 @@ async function cargarVentasLocal() {
     .eq("tipo_pedido", "local")
     .eq("estado_local", "cerrado")
     .gte("fecha_cierre", rango.desde)
-    .lt("fecha_cierre", rango.hasta);
+    .lt("fecha_cierre", rango.hasta)
+    .order("fecha_cierre", { ascending: false });
   if (error) {
-    handleError(error, "Error cargando ventas locales");
+    handleError(error, "No se pudieron cargar las ventas del restaurante.");
     return;
   }
   ventasLocalCache = data || [];
-  const totalVentas = ventasLocalCache.reduce((sum, p) => sum + Number(p.total), 0);
-  document.getElementById("totalLocalDia").innerText = `$${totalVentas.toFixed(2)}`;
-  document.getElementById("totalPedidosLocal").innerText = ventasLocalCache.length;
-  const cont = document.getElementById("listaVentasLocal");
-  if (!cont) return;
-  if (ventasLocalCache.length === 0) {
-    cont.innerHTML = `<div class="panel" style="text-align:center; padding: 40px;">📭 No hay ventas locales cerradas en esta fecha.</div>`;
+  $("totalLocalDia").textContent = formatoDinero(ventasLocalCache.reduce((s, p) => s + Number(p.total), 0));
+  $("totalPedidosLocal").textContent = ventasLocalCache.length;
+
+  const cont = $("listaVentasLocal");
+  if (!ventasLocalCache.length) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">🍽️</div><div class="empty-title">No hay mesas cobradas este día</div></div>`;
     return;
   }
-  cont.innerHTML = ventasLocalCache.map(p => {
-    const fechaCierre = new Date(p.fecha_cierre).toLocaleString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      hour12: true
-    });
-    return `
-      <div class="admin-item" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <div style="flex: 2; min-width: 150px;">
-          <strong style="font-size: 1.1rem;">🍽️ ${escapeHtml(p.mesa || "Mesa sin número")}</strong>
-          <br><small>📅 ${fechaCierre}</small>
-          <br><small>👨‍🍳 Mesero: ${escapeHtml(p.mesero_id ? (p.mesero_nombre || p.mesero_id.slice(0,8)) : "N/A")}</small>
-        </div>
-        <div style="flex: 1; text-align: center;">
-          <span style="font-size: 1.2rem; font-weight: bold; color: #0ea5a4;">$${Number(p.total).toFixed(2)}</span>
-          <br><span class="badge" style="background: #e2e8f0; padding: 2px 8px; border-radius: 20px;">${escapeHtml(p.metodo_pago_local || "N/A")}</span>
-        </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="small-btn" onclick="verDetallePedidoLocalModal(${p.id})" style="background: #0ea5a4; color: white;">👁️ Ver items</button>
-          <button class="delete-btn" onclick="confirmarEliminarPedidoLocal(${p.id})" style="background: #dc2626; color: white; border: none;">🗑️ Eliminar</button>
-        </div>
+  cont.innerHTML = ventasLocalCache.map(p => `
+    <div class="list-item clickable" onclick="verDetallePedidoLocalModal(${p.id})">
+      <div class="thumb thumb-empty" style="width:48px;height:48px;font-size:1.3rem;">🍽️</div>
+      <div class="grow">
+        <div class="title">${escapeHtml(p.mesa || "Sin nombre")}</div>
+        <div class="small muted">${escapeHtml(horaMX(p.fecha_cierre))} · ${escapeHtml(p.metodo_pago_local || "—")}</div>
       </div>
-    `;
-  }).join("");
+      <div class="amount">${formatoDinero(p.total)}</div>
+      <button class="icon-btn" style="color:var(--danger)" onclick="event.stopPropagation(); confirmarEliminarPedidoLocal(${p.id})" aria-label="Borrar">
+        <i class="fa-solid fa-trash-can"></i>
+      </button>
+    </div>`).join("");
 }
 
 function verDetallePedidoLocalModal(pedidoId) {
   const pedido = ventasLocalCache.find(p => p.id === pedidoId);
-  if (!pedido || !pedido.items) {
-    showToast("No hay detalle de productos para este pedido.");
-    return;
-  }
-  
-  const items = pedido.items;
-  let subtotal = 0;
-  const itemsHtml = items.map(item => {
-    const lineTotal = Number(item.precio) * Number(item.qty);
-    subtotal += lineTotal;
-    const unidad = item.tipo_venta === 'granel' ? 'kg' : 'pz';
-    return `
-      <tr>
-        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">${escapeHtml(item.nombre)}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">${escapeHtml(item.qty)} ${unidad}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">$${Number(item.precio).toFixed(2)}</td>
-        <td style="padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: right;">$${lineTotal.toFixed(2)}</td>
-      </tr>
-    `;
-  }).join('');
-  
-  const descuento = pedido.descuento_monto || 0;
-  const total = Number(pedido.total);
-  
-  const modalContent = `
-    <div style="padding: 8px;">
-      <p><strong>🍽️ Mesa:</strong> ${escapeHtml(pedido.mesa || "Sin mesa")}</p>
-      <p><strong>📅 Fecha cierre:</strong> ${new Date(pedido.fecha_cierre).toLocaleString('es-MX', { timeZone: ZONA_MX, hour12: true })}</p>
-      <p><strong>💳 Método de pago:</strong> ${escapeHtml(pedido.metodo_pago_local || "No especificado")}</p>
-      <hr>
-      <table style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background: #f1f5f9;">
-            <th style="padding: 8px; text-align: left;">Producto</th>
-            <th style="padding: 8px; text-align: center;">Cantidad</th>
-            <th style="padding: 8px; text-align: right;">Precio unit.</th>
-            <th style="padding: 8px; text-align: right;">Importe</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsHtml}
-        </tbody>
-        <tfoot>
-          <tr><td colspan="3" style="padding: 8px; text-align: right;"><strong>Subtotal:</strong></td><td style="padding: 8px; text-align: right;">$${subtotal.toFixed(2)}</td></tr>
-          ${descuento > 0 ? `<tr><td colspan="3" style="padding: 8px; text-align: right;"><strong>Descuento:</strong></td><td style="padding: 8px; text-align: right;">-$${descuento.toFixed(2)}</td></tr>` : ''}
-          <tr style="font-size: 1.1rem; background: #f8fafc;"><td colspan="3" style="padding: 8px; text-align: right;"><strong>TOTAL:</strong></td><td style="padding: 8px; text-align: right;"><strong>$${total.toFixed(2)}</strong></td></tr>
-        </tfoot>
-      </table>
+  if (!pedido) return;
+  const items = pedido.items || [];
+  const subtotal = items.reduce((s, i) => s + Number(i.precio) * Number(i.qty), 0);
+  const descuento = Number(pedido.descuento_monto) || 0;
+  const comision = Number(pedido.comision_tarjeta) || 0;
+
+  $("detallePedidoLocalContent").innerHTML = `
+    <div class="total-line">
+      <span><strong>${escapeHtml(pedido.mesa || "Sin nombre")}</strong><br>
+      <span class="small muted">${escapeHtml(fechaHoraCortaMX(pedido.fecha_cierre))} · ${escapeHtml(pedido.metodo_pago_local || "—")}</span></span>
+      <span class="amount">${formatoDinero(pedido.total)}</span>
     </div>
-  `;
-  
-  document.getElementById("detallePedidoLocalContent").innerHTML = modalContent;
-  document.getElementById("modalDetallePedidoLocal").style.display = "block";
-  document.body.style.overflow = "hidden";
+    <ul class="items">
+      ${items.map(i => `<li><span><span class="qty">${escapeHtml(cantidadTexto(i))}</span>${escapeHtml(i.nombre)}</span>
+        <span>$${(Number(i.precio) * Number(i.qty)).toFixed(2)}</span></li>`).join("")}
+    </ul>
+    <div class="stack-sm small">
+      <div class="row-between"><span class="muted">Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>
+      ${descuento > 0 ? `<div class="row-between"><span class="muted">Descuento</span><span>−$${descuento.toFixed(2)}</span></div>` : ""}
+      ${comision > 0 ? `<div class="row-between"><span class="muted">Comisión tarjeta</span><span>+$${comision.toFixed(2)}</span></div>` : ""}
+    </div>`;
+  abrirHoja("modalDetallePedidoLocal");
 }
 
 function cerrarModalDetallePedidoLocal() {
-  document.getElementById("modalDetallePedidoLocal").style.display = "none";
-  document.body.style.overflow = "auto";
+  cerrarHoja("modalDetallePedidoLocal");
 }
 
 function confirmarEliminarPedidoLocal(pedidoId) {
   pedidoLocalAEliminar = pedidoId;
-  document.getElementById("modalConfirmarEliminarLocal").style.display = "block";
-  document.body.style.overflow = "hidden";
+  abrirHoja("modalConfirmarEliminarLocal");
 }
 
 function cerrarModalConfirmarEliminarLocal() {
-  document.getElementById("modalConfirmarEliminarLocal").style.display = "none";
-  document.body.style.overflow = "auto";
+  cerrarHoja("modalConfirmarEliminarLocal");
   pedidoLocalAEliminar = null;
 }
 
@@ -1210,27 +977,25 @@ async function eliminarPedidoLocalConfirmado() {
     .delete()
     .eq("id", pedidoLocalAEliminar)
     .eq("tipo_pedido", "local");
-  
+  cerrarModalConfirmarEliminarLocal();
   if (error) {
-    handleError(error, "No se pudo eliminar el pedido local.");
-    cerrarModalConfirmarEliminarLocal();
+    handleError(error, "No se pudo borrar la venta.");
     return;
   }
-  
-  showToast("Pedido local eliminado correctamente", "success");
-  cerrarModalConfirmarEliminarLocal();
-  cargarVentasLocal(); // Recargar lista
-  cargarPedidos();     // Actualizar métricas globales
+  showToast("Venta borrada", "success");
+  cargarVentasLocal();
+  cargarPedidos({ forzar: true });
 }
 
 function limpiarFiltroLocal() {
-  document.getElementById("filtroFechaLocal").value = "";
+  $("filtroFechaLocal").value = getHoy();
   cargarVentasLocal();
 }
 
 // ======================
-// GESTIÓN DE USUARIOS (SUPER ADMIN)
+// USUARIOS (SUPER ADMIN)
 // ======================
+const NOMBRES_ROL = { admin: "Administrador", repartidor: "Repartidor", mesero: "Mesero", superadmin: "Super admin" };
 
 async function cargarListaUsuarios() {
   if (!esSuperAdmin) return;
@@ -1239,7 +1004,7 @@ async function cargarListaUsuarios() {
     .select("user_id, full_name, role, is_superadmin")
     .order("full_name", { ascending: true });
   if (error) {
-    handleError(error, "Error cargando lista de usuarios.");
+    handleError(error, "No se pudo cargar la lista de usuarios.");
     return;
   }
   listaUsuarios = data || [];
@@ -1247,65 +1012,48 @@ async function cargarListaUsuarios() {
 }
 
 function renderListaUsuarios() {
-  const cont = document.getElementById("listaUsuarios");
-  if (!cont) return;
+  const cont = $("listaUsuarios");
   if (!listaUsuarios.length) {
-    cont.innerHTML = '<div class="panel">No hay usuarios registrados.</div>';
+    cont.innerHTML = `<div class="empty"><div class="empty-title">No hay usuarios</div></div>`;
     return;
   }
-  cont.innerHTML = listaUsuarios.map(user => `
-    <div class="admin-item">
-      <div>
-        <strong>${escapeHtml(user.full_name || "Sin nombre")}</strong>
-        <p>${escapeHtml(user.user_id)}</p>
-        <p>Rol: ${escapeHtml(user.role)} ${user.is_superadmin ? " (Super Admin)" : ""}</p>
-      </div>
-      <div class="admin-actions">
-        <button class="delete-btn" onclick="eliminarUsuario('${escapeHtml(user.user_id)}')">Eliminar</button>
-      </div>
-    </div>
-  `).join("");
+  cont.innerHTML = listaUsuarios.map(u => {
+    const iniciales = (u.full_name || "?").split(" ").map(x => x[0]).slice(0, 2).join("").toUpperCase();
+    return `
+      <div class="list-item">
+        <div class="thumb thumb-empty" style="width:48px;height:48px;font-size:1rem;font-weight:800;border-radius:50%;">${escapeHtml(iniciales)}</div>
+        <div class="grow">
+          <div class="title">${escapeHtml(u.full_name || "Sin nombre")}</div>
+          <span class="role-badge ${escapeHtml(u.role)}">${escapeHtml(NOMBRES_ROL[u.role] || u.role)}${u.is_superadmin ? " · Super admin" : ""}</span>
+        </div>
+        ${u.is_superadmin ? "" : `
+        <button class="icon-btn" style="color:var(--danger)" onclick="eliminarUsuario('${escapeHtml(u.user_id)}')" aria-label="Borrar usuario">
+          <i class="fa-solid fa-user-xmark"></i>
+        </button>`}
+      </div>`;
+  }).join("");
 }
 
 async function eliminarUsuario(userId) {
-  if (!confirm("¿Eliminar este usuario? Perderá acceso al sistema.")) return;
+  const u = listaUsuarios.find(x => x.user_id === userId);
+  if (!confirm(`¿Quitar el acceso a ${u?.full_name || "este usuario"}? Ya no podrá entrar al sistema.`)) return;
 
   try {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) {
-      showToast("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.");
-      window.location.href = "admin.html";
-      return;
-    }
-
-    const { error } = await supabaseClient.functions.invoke('manage-user', {
-      body: { action: 'delete', userId }
-    });
-
-    if (error) {
-      if (error.message.includes('401') || error.status === 401) {
-        const { data: refreshData, error: refreshError } = await supabaseClient.auth.refreshSession();
-        if (refreshError || !refreshData.session) {
-          showToast("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.");
-          window.location.href = "admin.html";
-          return;
-        }
-        const { error: retryError } = await supabaseClient.functions.invoke('manage-user', {
-          body: { action: 'delete', userId }
-        });
-        if (retryError) {
-          handleError(retryError, "Error al eliminar usuario.");
-        } else {
-          showToast("Usuario eliminado correctamente", "success");
-          cargarListaUsuarios();
-        }
-      } else {
-        handleError(error, "Error al eliminar usuario.");
+    let { error } = await supabaseClient.functions.invoke("manage-user", { body: { action: "delete", userId } });
+    if (error && (error.status === 401 || String(error.message).includes("401"))) {
+      const { error: refreshError } = await supabaseClient.auth.refreshSession();
+      if (refreshError) {
+        showToast("Tu sesión expiró. Vuelve a entrar.");
+        window.location.href = "admin.html";
+        return;
       }
+      ({ error } = await supabaseClient.functions.invoke("manage-user", { body: { action: "delete", userId } }));
+    }
+    if (error) {
+      handleError(error, "No se pudo quitar el usuario.");
       return;
     }
-
-    showToast("Usuario eliminado correctamente", "success");
+    showToast("Usuario quitado", "success");
     cargarListaUsuarios();
   } catch (err) {
     handleError(err, "Error de conexión.");
@@ -1313,259 +1061,124 @@ async function eliminarUsuario(userId) {
 }
 
 function mostrarModalCrearUsuario() {
-  document.getElementById("modalCrearUsuario").style.display = "block";
-  document.body.style.overflow = "hidden";
+  abrirHoja("modalCrearUsuario");
 }
 
 async function crearUsuario() {
-  const email = document.getElementById("nuevoEmail").value.trim();
-  const role = document.getElementById("nuevoRol").value;
-  const fullName = document.getElementById("nuevoNombre").value.trim();
-  const password = document.getElementById("nuevoPassword").value.trim();
+  const email = $("nuevoEmail").value.trim();
+  const role = $("nuevoRol").value;
+  const fullName = $("nuevoNombre").value.trim();
+  const password = $("nuevoPassword").value.trim();
 
   if (!email || !role || !fullName) {
-    showToast("Completa todos los campos obligatorios.");
+    showToast("Escribe el nombre, el correo y elige el puesto.");
+    return;
+  }
+  if (password && password.length < 6) {
+    showToast("La contraseña debe tener al menos 6 caracteres.");
     return;
   }
 
-  const payload = {
-    action: 'create',
-    email,
-    role,
-    fullName
-  };
-  if (password) {
-    payload.password = password;
-  }
+  const payload = { action: "create", email, role, fullName };
+  if (password) payload.password = password;
 
   try {
-    const { data, error } = await supabaseClient.functions.invoke('manage-user', {
-      body: payload
-    });
-
+    const { data, error } = await supabaseClient.functions.invoke("manage-user", { body: payload });
     if (error) {
-      handleError(error, "Error al crear usuario.");
+      handleError(error, "No se pudo crear el usuario.");
       return;
     }
     if (data && data.error) {
       showToast(data.error);
       return;
     }
-
-    showToast(password
-      ? "Usuario creado con contraseña. Puede iniciar sesión ahora."
-      : "Usuario creado. Se envió un correo para establecer contraseña.", "success");
+    showToast(password ? "Usuario creado. Ya puede entrar." : "Usuario creado. Le llegará un correo para crear su contraseña.", "success");
     cerrarModalCrearUsuario();
     cargarListaUsuarios();
+    cargarRepartidores();
   } catch (err) {
     handleError(err, "Error de conexión.");
   }
 }
 
 function cerrarModalCrearUsuario() {
-  const modal = document.getElementById("modalCrearUsuario");
-  if (modal) {
-    modal.style.display = "none";
-    document.body.style.overflow = "auto";
-    document.getElementById("nuevoEmail").value = "";
-    document.getElementById("nuevoRol").value = "admin";
-    document.getElementById("nuevoNombre").value = "";
-    document.getElementById("nuevoPassword").value = "";
-  }
+  cerrarHoja("modalCrearUsuario");
+  ["nuevoEmail", "nuevoNombre", "nuevoPassword"].forEach(id => { $(id).value = ""; });
+  $("nuevoRol").value = "mesero";
 }
 
 // ======================
-// IMPRESIÓN DE TICKET
+// PESTAÑAS
 // ======================
-function imprimirPedido(pedidoId) {
-  const pedido = pedidosCache.find(p => p.id === pedidoId);
-  if (!pedido) {
-    showToast("No se encontró el pedido para imprimir.");
-    return;
-  }
-
-  const subtotal = (pedido.items || []).reduce((sum, item) => sum + (Number(item.precio) * Number(item.qty)), 0);
-  const descuento = pedido.descuento_monto || 0;
-  const total = Number(pedido.total);
-  const metodoPago = pedido.metodo_pago === "Efectivo" ? "EFECTIVO" : "TRANSFERENCIA";
-
-  const productosRows = (pedido.items || []).map(item => {
-    const cantidad = item.qty;
-    const unidad = item.tipo_venta === 'granel' ? 'KG' : 'PZ';
-    const descripcion = `${escapeHtml(item.nombre)} (${unidad})`;
-    const importe = (Number(item.precio) * cantidad).toFixed(2);
-    return `
-      <tr>
-        <td class="cantidad">${escapeHtml(cantidad)}</td>
-        <td class="descripcion">${descripcion}</td>
-        <td class="importe">$${importe}</td>
-      </tr>
-    `;
-  }).join('');
-
-  const ticketHtml = `
-    <div class="ticket-print">
-      <div class="header">
-        <h2>🐟 FISH-MAR</h2>
-        <p>Pescados y Mariscos frescos</p>
-        <p>Pirules Mz 004, Alfredo del Mazo</p>
-        <p>Ixtapaluca, Méx. C.P. 56577</p>
-        <p>Tel. (55) 6908 0488</p>
-      </div>
-
-      <div class="pedido-info">
-        PEDIDO: ${escapeHtml(pedido.numero_pedido || '#' + pedido.id)}<br>
-        FECHA: ${escapeHtml(formatearFechaPedido(pedido))}
-      </div>
-
-      <div class="cliente-info">
-        <strong>CLIENTE:</strong> ${escapeHtml(pedido.nombre)}<br>
-        <strong>TELÉFONO:</strong> ${escapeHtml(pedido.telefono)}<br>
-        <strong>DIRECCIÓN:</strong> ${escapeHtml(pedido.direccion)}<br>
-        <strong>PAGO:</strong> ${metodoPago}
-      </div>
-
-      <table class="productos-tabla">
-        <thead>
-          <tr>
-            <th class="cantidad">CANT</th>
-            <th class="descripcion">DESCRIPCIÓN</th>
-            <th class="importe">IMPORTE</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${productosRows}
-        </tbody>
-      </table>
-
-      <div class="totales">
-        <div class="linea-total">
-          <span>SUBTOTAL</span>
-          <span>$${subtotal.toFixed(2)}</span>
-        </div>
-        ${descuento > 0 ? `
-        <div class="linea-total">
-          <span>DESCUENTO</span>
-          <span>-$${descuento.toFixed(2)}</span>
-        </div>
-        ` : ''}
-        <div class="linea-total" style="font-size: 12pt; margin-top: 4px; border-top: 1px solid #000;">
-          <span>TOTAL</span>
-          <span>$${total.toFixed(2)}</span>
-        </div>
-      </div>
-
-      ${pedido.notas ? `<div style="margin: 6px 0; font-style: italic;">NOTAS: ${escapeHtml(pedido.notas)}</div>` : ''}
-
-      <div class="barcode">
-        ${escapeHtml(pedido.numero_pedido || '#' + pedido.id)}
-      </div>
-
-      <div class="gracias">
-        ¡Gracias por su compra!<br>
-        Visítenos de nuevo<br>
-        * Este ticket es su comprobante *
-      </div>
-    </div>
-  `;
-
-  const ventana = window.open('', '_blank', 'width=450,height=650,toolbar=yes,scrollbars=yes');
-  ventana.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <title>Ticket Pedido ${escapeHtml(pedido.numero_pedido || pedido.id)}</title>
-      <style>
-        body {
-          margin: 0;
-          padding: 0;
-          background: #e0e0e0;
-          display: flex;
-          justify-content: center;
-        }
-        @media print {
-          body {
-            background: white;
-            margin: 0;
-            padding: 0;
-          }
-          .no-print {
-            display: none;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      ${ticketHtml}
-      <div class="no-print" style="text-align:center; margin-top:20px; padding:10px;">
-        <button onclick="window.print()" style="padding:8px 16px; margin-right:10px;">🖨️ Imprimir</button>
-        <button onclick="window.close()" style="padding:8px 16px;">❌ Cerrar</button>
-      </div>
-    </body>
-    </html>
-  `);
-  ventana.document.close();
-}
-
-// ======================
-// CONFIGURACIÓN DE PESTAÑAS
-// ======================
-
 function setupTabs() {
-  const tabs = document.querySelectorAll('.tab-btn');
-  const panes = document.querySelectorAll('.tab-pane');
-  
+  const tabs = document.querySelectorAll(".tab-btn");
+  const panes = document.querySelectorAll(".tab-pane");
   tabs.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener("click", () => {
       const tabId = btn.dataset.tab;
-      tabs.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      panes.forEach(pane => {
-        pane.classList.remove('active');
-        if (pane.id === `tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`) {
-          pane.classList.add('active');
-        }
-      });
-      if (tabId === 'metricas' && chart) {
-        chart.update();
-      }
-      if (tabId === 'ventaslocal') {
-        cargarVentasLocal();
-      }
+      tabs.forEach(b => b.classList.toggle("active", b === btn));
+      panes.forEach(pane => pane.classList.toggle("active",
+        pane.id === `tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (tabId === "ventaslocal") cargarVentasLocal();
+      if (tabId === "metricas") actualizarMetricasPeriodo();
     });
   });
 }
 
 // ======================
-// AUTOACTUALIZACIÓN
+// EVENTOS E INICIO
 // ======================
+document.querySelectorAll("#filtrosEstado .chip").forEach(chip => chip.addEventListener("click", () => {
+  filtroEstadoActual = chip.dataset.estado;
+  document.querySelectorAll("#filtrosEstado .chip").forEach(c => c.classList.toggle("is-active", c === chip));
+  renderPedidosFiltrados();
+}));
+$("filtroFecha").addEventListener("change", renderPedidosFiltrados);
 
-setInterval(() => {
-  cargarPedidos();
-}, 5000);
+document.querySelectorAll("#filtroCategoriaChips .chip").forEach(chip => chip.addEventListener("click", () => {
+  categoriaProductoFilter = chip.dataset.cat;
+  document.querySelectorAll("#filtroCategoriaChips .chip").forEach(c => c.classList.toggle("is-active", c === chip));
+  filtrarProductos();
+}));
 
-// ======================
-// INICIALIZACIÓN
-// ======================
+document.querySelectorAll("#filtrosPeriodo .chip").forEach(chip =>
+  chip.addEventListener("click", () => seleccionarPeriodo(chip.dataset.periodo)));
 
-document.addEventListener("DOMContentLoaded", () => {
-  const btnConfirmar = document.getElementById("btnConfirmarEliminarLocal");
-  if (btnConfirmar) {
-    btnConfirmar.addEventListener("click", eliminarPedidoLocalConfirmado);
-  }
+$("filtroFechaLocal").addEventListener("change", cargarVentasLocal);
+$("imagen_url").addEventListener("input", actualizarPreview);
+$("previewImg").addEventListener("error", () => { $("previewImg").hidden = true; });
+$("nuevoProductoSelect").addEventListener("change", (e) => {
+  $("nuevoProductoCantidadContainer").hidden = !e.target.value;
+  if (e.target.value) $("nuevoProductoCantidad").value = 1;
 });
+$("btnConfirmarEliminarLocal").addEventListener("click", eliminarPedidoLocalConfirmado);
 
 (async function initDashboard() {
-  const autenticado = await verificarSesionAdmin();
-  if (!autenticado) return;
-  await cargarRepartidores();
-  await cargarPedidos();
-  await cargarProductosAdmin();
-  setupTabs();
-  actualizarMetricasPeriodo();
+  const ok = await verificarSesionAdmin();
+  if (!ok) return;
+
   if (esSuperAdmin) {
-    document.getElementById("tabUsuariosBtn").style.display = "inline-block";
-    await cargarListaUsuarios();
+    $("tabUsuariosBtn").hidden = false;
+    $("tabbar").style.setProperty("--tabs", 5);
   }
+  setupTabs();
+
+  await cargarRepartidores();
+  await Promise.all([cargarPedidos({ forzar: true }), cargarProductosAdmin()]);
+  if (esSuperAdmin) cargarListaUsuarios();
+
+  // Tiempo real: recargar en cuanto cambie un pedido
+  let espera = null;
+  supabaseClient.channel("pedidos-admin")
+    .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, () => {
+      clearTimeout(espera);
+      espera = setTimeout(() => cargarPedidos(), 400);
+    })
+    .subscribe();
+
+  // Respaldo por si se corta el tiempo real
+  setInterval(() => cargarPedidos(), 20000);
+  // Actualizar los "hace X min" sin recargar datos
+  setInterval(() => { if (!document.querySelector(".order select:focus")) renderPedidosFiltrados(); }, 60000);
 })();

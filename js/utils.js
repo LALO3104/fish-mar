@@ -149,3 +149,35 @@ function handleError(error, defaultMessage = 'Ocurrió un error. Intenta de nuev
   if (!window.debugLog) window.debugLog = [];
   window.debugLog.push({ time: new Date(), error });
 }
+// ======================
+// ESTADOS DE PEDIDO A DOMICILIO
+// (el valor se guarda tal cual en la base; la etiqueta es lo que se muestra)
+// ======================
+const ESTADOS_PEDIDO = [
+  { valor: "Recibido", etiqueta: "Recibido", clase: "recibido", icono: "fa-inbox" },
+  { valor: "En proceso", etiqueta: "Preparando", clase: "enproceso", icono: "fa-fire-burner" },
+  { valor: "El repartidor está en camino", etiqueta: "En camino", clase: "encamino", icono: "fa-motorcycle" },
+  { valor: "Entregado", etiqueta: "Entregado", clase: "entregado", icono: "fa-circle-check" }
+];
+
+function estadoInfo(estado) {
+  return ESTADOS_PEDIDO.find(e => e.valor === estado) || { valor: estado, etiqueta: estado || "Sin estado", clase: "", icono: "fa-circle" };
+}
+
+// Hora corta en México, ej. "8:57 p.m."
+function horaMX(fecha) {
+  const d = new Date(fecha);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("es-MX", { timeZone: ZONA_MX, hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+// Fecha y hora cortas en México, ej. "23 oct, 8:57 p.m."
+function fechaHoraCortaMX(fecha) {
+  const d = new Date(fecha);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString("es-MX", { timeZone: ZONA_MX, day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+function formatoDinero(n) {
+  return "$" + Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
